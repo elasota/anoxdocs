@@ -1,0 +1,48 @@
+MDA files can contain binary blobs.
+
+Format:
+
+
+$<type>:<size>:<padded size>:<checksum>
+&<lines>
+...
+
+Type: 4-character type ID
+Size: Size
+Padded size: Size with additional padding
+Checksum: Checksum 
+
+Data lines cap out at 76 ASCII characters, and the padded size is encoded.
+
+If padded size is not a multiple of 3, then the data is padded with enough 0
+bytes at the START to sum to a multiple of 3.
+
+The 4:3 scheme is as follows: Given 3 input binary values:
+
+aaaaaaAA BBBBbbbb CCcccccc
+
+The output 6-bit values are:
+aaaaaa AABBBB bbbbCC cccccc
+
+The 6-bit value to ASCII forward encoding is:
+0..9   -> '0'..'9'
+10..35 -> 'A'..'Z'
+36..61 -> 'a'..'z'
+62     -> '.'
+63     -> '/'
+
+Checksum computation:
+a = adler32(0,0,0)
+b = adler32(a,&type,4)
+c = adler32(b,&littleEndian(size),4)
+checksum = adler32(c,data,size)
+
+
+ANIP chunk:
+- To be documented
+
+BONE chunk:
+- To be documented
+
+MRPH chunk:
+- To be documented
