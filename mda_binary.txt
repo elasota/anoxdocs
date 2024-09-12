@@ -31,18 +31,54 @@ The 6-bit value to ASCII forward encoding is:
 62     -> '.'
 63     -> '/'
 
-Checksum computation:
+Checksum computation for binary blobs:
 a = adler32(0,0,0)
 b = adler32(a,&type,4)
 c = adler32(b,&littleEndian(size),4)
 checksum = adler32(c,data,size)
 
 
+Checksum computation for models:
+a = adler32(0,0,0)
+checksum = adler32(a, md2 data, size of md2 data)
+
+
+All MDA binary chunks start with 8 seemingly-random bytes of unknown meaning
+(possibly checksums)
+
+
 ANIP chunk:
-- To be documented
+	UINT32               magic (0xffee1acb)
+	UINT32               model checksum
+	UINT32               Num animations
+	AnimInfo[NumAnims]   Animations
+
+AnimInfo:
+	char[8]              Animation category
+	UINT32               Animation number (unique per animation category)
+	UINT32               First frame
+	UINT32               Num frames
 
 BONE chunk:
-- To be documented
+	UINT32               magic (0xad1f10ed)
+	UINT32               model checksum
+	UINT32[3]            Head tri vertex indexes (matches "headtri" def in MDA)
+	FOURCC               Bone ID
+	Matrix44f[NumFrames] frames (not normalized?)
 
 MRPH chunk:
-- To be documented
+	UINT32                magic (0xd7c456da)
+	UINT32                model checksum
+	FOURCC                Head bone ID
+	UINT32                Num keys
+	MorphKey[Num keys]    Keys
+	VertMorph[Num morphs] Morphs
+
+MorphKey:
+	FOURCC                Morph ID
+	UINT32                Position of morph data
+	UINT32                Num vert morphs
+
+VertMorph:
+	UINT32                Vertex index
+	Vector3f              Vertex offset
