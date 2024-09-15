@@ -152,15 +152,6 @@ XYPrintFXCommand:
 	BYTE(80) OptionalExpression(XCoord) OptionalExpression(YCoord) OptionalExpression(Alpha)
 		OptionalExpression(Red) OptionalExpression(Green) OptionalExpression(Blue) OptionalString(Font)
 		String(Message) OptionalExpression(Condition) FormattingValue
-	
-	ExpressionSegment ExpressionValue OptionalExpression2(A) OptionalExpression2(B) OptionalExpression2(C) OptionalExpression2(D) OptionalExpression2(E) OptionalExpression2(F)
-		UINT32(0)
-		String OptionalExpression(Condition) FormattingValue
-
-XYPrintFXCommand:
-	BYTE(80) ExpressionSegment ExpressionValue OptionalExpression2(A) OptionalExpression2(B) OptionalExpression2(C) OptionalExpression2(D) OptionalExpression2(E) OptionalExpression2(F)
-		OptionalExpression2(G) OptionalExpression2(H) OptionalExpression2(I)
-		String OptionalExpression(Condition) FormattingValue
 
 TitleCommand:
 	BYTE(84) OptionalExpression(Condition) String FormattingValue
