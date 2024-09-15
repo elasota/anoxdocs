@@ -1178,23 +1178,6 @@ namespace APEDisasm
                 ulong cc = inStream.ReadUInt64();
                 byte commandByte = inStream.ReadByte();
 
-                if (commandByte > 20)
-                {
-                    if (commandByte == 69)
-                    {
-                        if (cc != 0)
-                            inStream.ReportError("Invalid cc code for end command");
-
-                        if (disasmStream != null)
-                            disasmStream.WriteLineIndented(indent, "EndCommand");
-                        return;
-                    }
-
-                    inStream.ReportError("Invalid switch command code {commandByte}");
-                }
-
-                SwitchCommand cmd = new SwitchCommand(commandByte);
-
                 if (disasmStream != null)
                 {
                     string ccBin = "";
@@ -1211,6 +1194,23 @@ namespace APEDisasm
 
                     disasmStream.WriteLineIndented(indent, $"CCLabel({ccBin})");
                 }
+
+                if (commandByte > 20)
+                {
+                    if (commandByte == 69)
+                    {
+                        if (cc != 0)
+                            inStream.ReportError("Invalid cc code for end command");
+
+                        if (disasmStream != null)
+                            disasmStream.WriteLineIndented(indent, "EndCommand");
+                        return;
+                    }
+
+                    inStream.ReportError("Invalid switch command code {commandByte}");
+                }
+
+                SwitchCommand cmd = new SwitchCommand(commandByte);
 
                 cmd.Load(inStream, indent, disasmStream);
 
