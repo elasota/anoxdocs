@@ -1,0 +1,252 @@
+APE binary grammar:
+
+APEFile:
+	UINT32(317) UINT32(0xffffffff) RootElementList
+
+RootElementList:
+	RootElement
+	| RootElementList RootElement
+
+RootElement:
+	UINT32(0) UINT32(0xfffffffe) Switches
+	| UINT32(WindowID) Window
+
+
+
+Window:
+	WindowCommandList
+
+WindowCommandList:
+	UnterminatedWindowCommandList EndCommand
+	| EndCommand
+
+UnterminatedWindowCommandList:
+	Command
+	| UnterminatedWindowCommandList Command
+
+WindowCommand:
+	WindowSwitchCommand
+	| SimpleStringCommand
+	| BodyCommand
+	| ChoiceCommand
+	| ImageCommand
+	| DimensionsCommand
+	| SubwindowCommand
+	| BackgroundCommand
+	| FlagsCommand
+	| CamCommand
+
+
+SwitchCommandList:
+	UnterminatedSwitchCommandList UINT64(0) EndCommand
+	| UINT64(0) EndCommand
+
+UnterminatedSwitchCommandList:
+	UINT64(CC) SwitchCommand
+	| UnterminatedWindowCommandList UINT64(CC) SwitchCommand
+
+SwitchCommand:
+	StringCommandByte OptionalString(StringValue) FormattingValue(FormattingValue) OptionalExpression(Expression)
+
+StringCommandByte:
+	BYTE(0)			// = setfocus
+	| BYTE(1)		// = if
+	| BYTE(2)		// = set/unset
+	| BYTE(3)		// = variable name?
+	| BYTE(4)		// = goto
+	| BYTE(5)		// = gosub
+	| BYTE(6)		// = console
+	| BYTE(7)		// = echo
+	| BYTE(8)		// = target
+	| BYTE(9)		// = pathtarget
+	| BYTE(10)		// = extern
+	| BYTE(11)		// = while
+	| BYTE(12)		// = playambient
+	| BYTE(13)		// = loopambient
+	| BYTE(14)		// = stopambient
+	| BYTE(15)		// = playscene
+	| BYTE(16)		// = loopscene
+	| BYTE(17)		// = stopscene
+	| BYTE(18)		// = chainscripts
+	| BYTE(19)		// = closewindow
+	| BYTE(20)		// = loadape
+
+WindowSwitchCommand:
+	WindowSwitchCommandByte UINT32(Label)
+
+WindowSwitchCommandByte:
+	BYTE(49)		// = startswitch
+	| BYTE(50)		// = thinkswitch
+	| BYTE(51)		// = finishswitch
+
+SimpleStringCommand:
+	SimpleStringCommandByte String(Command)
+
+SimpleStringCommandByte:
+	BYTE(65)		// = startconsole
+	| BYTE(70)		// = font
+	| BYTE(78)		// = finishconsole
+	| BYTE(79)		// = nextwindow
+	| BYTE(87)		// = style
+
+BodyCommand:
+	BYTE(66) OptionalExpression String FormattingValue
+
+ChoiceCommand:
+	BYTE(67) OptionalExpression String FormattingValue UINT32(Label)
+
+BackgroundCommand:
+	BYTE(68) RGBA8Color(Color1) RGBA8Color(Color2) RGBA8Color(Color3) RGBA8Color(Color4)
+
+EndCommand:
+	BYTE(69)
+
+DimensionsCommand:
+	BYTE(71) OptionalExpression(XPos) OptionalExpression(YPos) OptionalExpression(Width) OptionalExpression(Height)
+
+SubwindowCommand:
+	BYTE(72) UINT64(0) UINT32(Label)
+
+OptionalExpression:
+	UINT64(1) ExpressionValue UINT64(0)
+	| UINT64(0)
+
+ImageCommand:
+	BYTE(73) OptionalExpression String(FileName) OptionalExpression(XPos) OptionalExpression(YPos) OptionalExpression(Width) OptionalExpression(Height) UINT32(Flags)
+	// Flags:
+	//     (1 << 0): stretch
+	//     (1 << 1): tile
+	//     (1 << 2): solid
+	// Background commands have zero XPos/YPos and no width/height
+
+FlagsCommand:
+	BYTE(76) UINT32(Flags)
+	// Flags:
+	//     (1 << 0):  persist
+	//     (1 << 1):  no background (see notes)
+	//     (1 << 2):  noscroll
+	//     (1 << 3):  nograb
+	//     (1 << 4):  norelease
+	//     (1 << 5):  subtitle
+	//     (1 << 29): passive2d
+	//     (1 << 30): passive
+
+NOTE on "no background" flag: This is set unless there is a "background" command and the "background" command didn't have the "none" flag.  However there are some quirks:
+- If the "background" command specifies an image, then it will emit an ImageCommand with X=0 Y=0 and no size, but will also clear the "no background" flag
+- If the "background" specifies colors that are all 00000000, then the BackgroundCommand will not be emitted, but the "no background" flag will still be cleared
+
+When decompiling, if there is an image with a size or non-zero position, no BackgroundCommand, and the "no background" flag is set, then dump the command: background color1=00000000
+
+
+CamCommand:
+	BYTE(77) String(Name) OptionalString(From) OptionalString(To) OptionalString(Owner)
+		UINT16(Yaw) UINT16(Pitch) UINT16(FOV) UINT16(Far) UINT16(Near) UINT16(Fwd) UINT16(Speed) UINT16(Lift) UINT16(Lag) UINT16(Occlude) UINT16(Restore) UINT16(Zip)
+	// UINT16 values are 0x8001 if absent.  Restore, zip, and occlude are on by default?  (TODO: Check)
+
+
+OptionalString:
+	UINT32(0)
+	| String
+
+XYPrintFXCommand:
+	BYTE(80) OptionalExpression(XCoord) OptionalExpression(YCoord) OptionalExpression(Alpha)
+		OptionalExpression(Red) OptionalExpression(Green) OptionalExpression(Blue) OptionalString(Font)
+		String(Message) OptionalExpression(Condition) FormattingValue
+	
+	ExpressionSegment ExpressionValue OptionalExpression2(A) OptionalExpression2(B) OptionalExpression2(C) OptionalExpression2(D) OptionalExpression2(E) OptionalExpression2(F)
+		UINT32(0)
+		String OptionalExpression(Condition) FormattingValue
+
+XYPrintFXCommand:
+	BYTE(80) ExpressionSegment ExpressionValue OptionalExpression2(A) OptionalExpression2(B) OptionalExpression2(C) OptionalExpression2(D) OptionalExpression2(E) OptionalExpression2(F)
+		OptionalExpression2(G) OptionalExpression2(H) OptionalExpression2(I)
+		String OptionalExpression(Condition) FormattingValue
+
+TitleCommand:
+	BYTE(84) OptionalExpression(Condition) String FormattingValue
+
+TalkCommand:
+	BYTE(89) String(Animation1) OptionalString(Animation2) String(Name1) String(Name2) UINT32(Stay1Flag) UINT32(Stay2Flag)
+	// Name1 == "_click_" and Name2 == "playerchar0" -> talk npc
+	// Name2 == "playerchar0" and Name1 == "_click_" -> talk player
+
+OptionalExpression2:
+	UINT64(0)
+	| UINT64(1) ExpressionValue
+
+FormattingValue:
+	BYTE(0) TypedFormattingValue FormattingValue
+	| BYTE(255) BYTE(255)
+
+TypedFormattingValue:
+	BYTE(4) Float
+	| BYTE(5) String	// Variable name
+	| BYTE(16) String	// String
+	| BYTE(17) String	// String variable name
+
+ExpressionSegment:
+	UINT64(0)
+	| UINT64(1) ExpressionValue UINT64(0)
+
+
+Switches:
+	UINT32(0)
+	| UINT32(Label) UINT32(1) UINT32(0) CommandList Switches
+
+ExpressionValue:
+	ExpressionOperator BYTE(ValueFlags) UINT64(LValueTreePos) LValue UINT64(RValueTreePos) RValue
+
+ExpressionOperator:
+	BYTE(1)		// = or
+	| BYTE(2)	// = and
+	| BYTE(3)	// = xor
+	| BYTE(4)	// = >
+	| BYTE(5)	// = <
+	| BYTE(6)	// = >=
+	| BYTE(7)	// = <=
+	| BYTE(8)	// = eq
+	| BYTE(9)	// = +
+	| BYTE(10)	// = -
+	| BYTE(11)	// = mul
+	| BYTE(12)	// = div
+	| BYTE(13)	// = neq
+
+Bitmask of value flags and corresponding LValue/RValue expression behaviors:
+	(1 << 0) Left side is variable
+	(1 << 1): Right side is variable
+	(1 << 2): Left side is float
+	(1 << 3): Right side is float
+	(1 << 4): Left side is string
+	(1 << 5): Right side is string
+	
+	If a side is not a float or string, then it is an expression.
+	Variables that are not floats or strings are not allowed.
+	Values that are both strings and floats are not allowed.
+
+	Variables and strings are coded as String
+	Expressions are encoded as ExpressionValue
+	Non-variable floats are encoded as Float
+
+
+Float:
+	FLOAT32
+
+String:
+	UINT32(Length)
+	BYTE[Length - 1](Chars)
+	BYTE(0)
+
+
+
+
+Condition control register behavior:
+APE uses an unusual system for processing conditionals:
+
+All switch statements are prefixed with an expected condition control value.
+The instruction is not executed unless the active CC value matches the CC value of the instruction.
+
+For unconditional instructions, the next CC value is changed to (CC << 2) + 3
+In the case of "if" instructions, the first instruction in the true case is (CC << 2) + 1,
+the first instruction in the false case is (CC << 2) + 2, and the continuation after the true and false cases is  (CC << 2) + 3
+
+In the case of "while" instructions, the inner loop starts at (CC << 2) + 1, and the loop exits at (CC << 2) + 3
