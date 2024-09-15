@@ -1,0 +1,5 @@
+.vs
+*.user
+APEDisasm/APEDisasm/bin
+APEDisasm/APEDisasm/obj
+launchSettings.json
