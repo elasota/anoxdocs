@@ -161,10 +161,6 @@ TalkCommand:
 	// Name1 == "_click_" and Name2 == "playerchar0" -> talk npc
 	// Name2 == "playerchar0" and Name1 == "_click_" -> talk player
 
-OptionalExpression2:
-	UINT64(0)
-	| UINT64(1) ExpressionValue
-
 FormattingValue:
 	BYTE(0) TypedFormattingValue FormattingValue
 	| BYTE(255) BYTE(255)
@@ -182,7 +178,7 @@ ExpressionSegment:
 
 Switches:
 	UINT32(0)
-	| UINT32(Label) UINT32(1) UINT32(0) CommandList Switches
+	| UINT32(Label) UINT32(1) UINT32(0) SwitchCommandList Switches
 
 ExpressionValue:
 	ExpressionOperator BYTE(ValueFlags) UINT64(LValueTreePos) LValue UINT64(RValueTreePos) RValue
