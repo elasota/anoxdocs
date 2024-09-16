@@ -132,6 +132,10 @@ namespace APEDisasm
     {
         private Stream _stream;
 
+        public ISet<long>? LabelTracker { get; set; }
+        public long Position { get { return _stream.Position; } }
+
+
         public InputStream(Stream stream)
         {
             _stream = stream;
@@ -214,6 +218,12 @@ namespace APEDisasm
         public bool IsAtEOF()
         {
             return _stream.Position == _stream.Length;
+        }
+
+        public void MarkSwitchLabel()
+        {
+            if (LabelTracker != null)
+                LabelTracker.Add(_stream.Position);
         }
 
         public void ReportError(string err)
@@ -476,6 +486,8 @@ namespace APEDisasm
 
         public void Load(InputStream inStream, int indent, OutputStream? disasmStream)
         {
+            inStream.MarkSwitchLabel();
+
             Label = inStream.ReadUInt32();
 
             if (disasmStream != null)
@@ -568,10 +580,19 @@ namespace APEDisasm
             string nibbles = "0123456789abcdef";
             string result = "";
 
-            for (int i = 0; i < 8; i++)
+            for (int i = 0; i < 4; i++)
             {
-                result = nibbles[(int)(colorValue & 0xfu)] + result;
-                colorValue >>= 4;
+                int b = (int)(colorValue & 0xff);
+                colorValue >>= 8;
+
+                string byteStr = "";
+                for (int j = 0; j < 2; j++)
+                {
+                    byteStr = nibbles[(int)(b & 0xfu)] + byteStr;
+                    b >>= 4;
+                }
+
+                result = result + byteStr;
             }
 
             return result;
@@ -1440,7 +1461,10 @@ namespace APEDisasm
         public void Load(InputStream inStream, int indent, OutputStream? disasmStream)
         {
             if (disasmStream != null)
+            {
+                disasmStream.WriteLine($"FilePosition({inStream.Position})");
                 disasmStream.WriteLineIndented(indent, $"Switch({Label})");
+            }
 
             CommandList.Load(inStream, indent + 1, disasmStream);
         }
@@ -1462,7 +1486,9 @@ namespace APEDisasm
             if (disasmStream != null)
                 disasmStream.WriteLineIndented(indent, "Switches");
 
+            inStream.MarkSwitchLabel();
             uint label = inStream.ReadUInt32();
+
             while (label != 0)
             {
                 Switch sw = new Switch(label);
@@ -1470,6 +1496,7 @@ namespace APEDisasm
 
                 _switchList.Add(sw);
 
+                inStream.MarkSwitchLabel();
                 label = inStream.ReadUInt32();
             }
         }
@@ -1509,6 +1536,9 @@ namespace APEDisasm
                 }
                 else
                 {
+                    if (disasmStream != null)
+                        disasmStream.WriteLine($"FilePosition({inStream.Position})");
+
                     Window window = new Window(windowID);
 
                     if (disasmStream != null)
@@ -1527,6 +1557,7 @@ namespace APEDisasm
     internal class APEFile
     {
         public RootElementList RootElementList { get; private set; }
+
 
         public APEFile()
         {
@@ -2681,13 +2712,22 @@ namespace APEDisasm
             Environment.ExitCode = -1;
         }
 
-        static void Decompile(Stream inStream, Stream outStream)
+        static void Decompile(Stream inStream, Stream outStream, bool enableInlineTracking, out IReadOnlySet<long>? labelLocations)
         {
-            APEFile apeFile = new APEFile();
+            labelLocations = null;
 
+            APEFile apeFile = new APEFile();
+            InputStream wrappedInStream = new InputStream(inStream);
             OutputStream decompileStream = new OutputStream(outStream);
 
-            apeFile.Load(new InputStream(inStream), null);
+            if (enableInlineTracking)
+            {
+                HashSet<long> labelLocsHashSet = new HashSet<long>();
+                wrappedInStream.LabelTracker = labelLocsHashSet;
+                labelLocations = labelLocsHashSet;
+            }
+
+            apeFile.Load(wrappedInStream, null);
 
             Decompiler decompiler = new Decompiler();
             decompiler.Load(apeFile);
@@ -2704,8 +2744,80 @@ namespace APEDisasm
             apeFile.Load(new InputStream(inStream), disasmStream);
         }
 
-        static void ValidateFile(string apePath, string sourcePath, string dparsePath)
+        static bool CompareBytes(Stream streamA, Stream streamB, long size)
         {
+            if (size == 0)
+                return true;
+
+            int bufferSize = 1024;
+            if (size < 1024)
+                bufferSize = (int)size;
+
+            byte[] bytesA = new byte[bufferSize];
+            byte[] bytesB = new byte[bufferSize];
+
+            for (long i = 0; i < size; i += bufferSize)
+            {
+                int chunkSize = (int)Math.Min(bufferSize, size - i);
+
+                streamA.Read(bytesA, 0, chunkSize);
+                streamB.Read(bytesB, 0, chunkSize);
+
+                for (int j = 0; j < chunkSize; j++)
+                {
+                    if (bytesA[j] != bytesB[j])
+                        return false;
+                }
+            }
+
+            return true;
+        }
+
+        static bool CompareLabels(Stream streamA, Stream streamB)
+        {
+            byte[] bytes = new byte[4];
+            streamA.Read(bytes, 0, 4);
+
+            uint streamALabel = 0;
+            for (int i = 0; i < 4; i++)
+                streamALabel |= (uint)(bytes[i] << (i * 8));
+
+            streamB.Read(bytes, 0, 4);
+
+            uint streamBLabel = 0;
+            for (int i = 0; i < 4; i++)
+                streamBLabel |= (uint)(bytes[i] << (i * 8));
+
+            // Non-inline IDs must match exactly
+            if (streamALabel < 1000000000 || streamBLabel < 1000000000)
+                return streamALabel == streamBLabel;
+
+            uint streamAGenIndex = streamALabel % 10000u;
+            uint streamBGenIndex = streamBLabel % 10000u;
+
+            uint streamAHigh = streamALabel / 1000000000u;
+            uint streamBHigh = streamBLabel / 1000000000u;
+
+            if (streamAGenIndex != streamBGenIndex)
+                return false;
+
+            if (streamAHigh != streamBHigh)
+                return false;
+
+            return true;
+        }
+
+        static void ValidateFile(string apePath, string sourcePath, string dparsePath, IReadOnlySet<long>? labelLocations)
+        {
+            if (labelLocations == null)
+                throw new Exception("Internal error: No label location tracker");
+
+            List<long> sortedLabelLocations = new List<long>();
+            foreach (long labelLocation in labelLocations)
+                sortedLabelLocations.Add(labelLocation);
+
+            sortedLabelLocations.Sort();
+
             Console.WriteLine("Validating {0}", sourcePath);
 
             string recompiledPath = Path.ChangeExtension(sourcePath, "ape");
@@ -2721,14 +2833,23 @@ namespace APEDisasm
 
                 args.Add(Path.GetFileName(sourcePath));
 
-                string sourceDir = Path.GetDirectoryName(sourcePath);
-
+                string? sourceDir = Path.GetDirectoryName(sourcePath);
+                if (sourceDir == null)
+                    throw new Exception("Source path wasn't in a directory");
 
                 ProcessStartInfo psi = new ProcessStartInfo(dparsePath, args);
                 psi.WorkingDirectory = sourceDir;
 
 
-                System.Diagnostics.Process process = System.Diagnostics.Process.Start(psi);
+                System.Diagnostics.Process? process = System.Diagnostics.Process.Start(psi);
+
+                if (process == null)
+                {
+                    Console.WriteLine("FAILED: dparse didn't start");
+                    return;
+                }
+
+
                 process.WaitForExit();
 
                 if (process.ExitCode != 0)
@@ -2750,23 +2871,34 @@ namespace APEDisasm
                             return;
                         }
 
-                        byte[] apeBytes = new byte[1024];
-                        byte[] recompiledBytes = new byte[apeBytes.Length];
-
-                        for (int i = 0; i < apeFile.Length; i += apeBytes.Length)
+                        long lastReadStart = 0;
+                        foreach (long labelLocation in sortedLabelLocations)
                         {
-                            int chunkSize = (int)Math.Min((long)apeBytes.Length, apeFile.Length - i);
-                            apeFile.Read(apeBytes, 0, chunkSize);
-                            recompiledFile.Read(recompiledBytes, 0, chunkSize);
+                            long chunkSize = labelLocation - lastReadStart;
 
-                            for (int j = 0; j < chunkSize; j++)
+                            if (chunkSize > 0)
                             {
-                                if (apeBytes[j] != recompiledBytes[j])
+                                if (!CompareBytes(apeFile, recompiledFile, chunkSize))
                                 {
-                                    Console.WriteLine("FAILED: File contents were different");
+                                    Console.WriteLine($"FAILED: File contents were different (strict check in range {lastReadStart}..{labelLocation} failed)");
                                     return;
                                 }
                             }
+
+                            if (!CompareLabels(apeFile, recompiledFile))
+                            {
+                                Console.WriteLine($"FAILED: File contents were different (label compare check at {labelLocation} failed)");
+                                return;
+                            }
+
+                            lastReadStart = labelLocation + 4;
+                        }
+
+                        long remainderSize = apeFile.Length - lastReadStart;
+                        if (!CompareBytes(apeFile, recompiledFile, remainderSize))
+                        {
+                            Console.WriteLine($"FAILED: File contents were different (trailing strict check at {lastReadStart} failed)");
+                            return;
                         }
                     }
                 }
@@ -2790,6 +2922,8 @@ namespace APEDisasm
 
         static void DisassembleSingleFile(string inputPath, string outputPath, bool sourceMode, bool validateMode, string dparsePath)
         {
+            IReadOnlySet<long>? labelLocations = null;
+
             using (FileStream inFile = new FileStream(inputPath, FileMode.Open, FileAccess.Read))
             {
                 using (FileStream outFile = new FileStream(outputPath, FileMode.Create, FileAccess.Write))
@@ -2797,7 +2931,7 @@ namespace APEDisasm
                     try
                     {
                         if (sourceMode)
-                            Decompile(inFile, outFile);
+                            Decompile(inFile, outFile, validateMode, out labelLocations);
                         else
                             Disassemble(inFile, outFile);
                     }
@@ -2811,7 +2945,7 @@ namespace APEDisasm
 
             if (validateMode && sourceMode)
             {
-                ValidateFile(inputPath, outputPath, dparsePath);
+                ValidateFile(inputPath, outputPath, dparsePath, labelLocations);
             }
         }
 
