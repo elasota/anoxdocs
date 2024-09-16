@@ -482,6 +482,28 @@ namespace APEDisasm
         }
     }
 
+    internal class WindowSwitchCommandComparer : IComparer<WindowSwitchCommand>
+    {
+        public int Compare(WindowSwitchCommand? x, WindowSwitchCommand? y)
+        {
+            if (x == null)
+            {
+                if (y == null)
+                    return 0;
+                else
+                    return -1;
+            }
+
+            if (y == null)
+                return 1;
+
+            uint xLabel = x.Label;
+            uint yLabel = y.Label;
+
+            return xLabel.CompareTo(yLabel);
+        }
+    }
+
     internal class WindowSwitchCommand : IWindowCommand
     {
         public enum ECommandType
@@ -682,7 +704,11 @@ namespace APEDisasm
             Value = inStream.ReadFloat();
 
             if (disasmStream != null)
-                disasmStream.WriteLineIndented(indent, $"FloatOperand({Value})");
+            {
+                string floatStr = Value.ToString("G9", CultureInfo.InvariantCulture);
+                uint floatBits = BitConverter.SingleToUInt32Bits(Value);
+                disasmStream.WriteLineIndented(indent, $"FloatOperand({floatStr} Bits:{floatBits})");
+            }
         }
     }
 
@@ -1633,7 +1659,22 @@ namespace APEDisasm
 
         private void DumpFloat(float f, OutputStream outStream)
         {
-            outStream.WriteString(f.ToString("G", CultureInfo.InvariantCulture));
+            string floatStr = f.ToString("R", CultureInfo.InvariantCulture);
+            if (floatStr.Contains("E"))
+            {
+                floatStr = f.ToString("F", CultureInfo.InvariantCulture);
+
+                if (floatStr.Contains('.'))
+                {
+                    while (floatStr.EndsWith('0'))
+                        floatStr = floatStr.Substring(0, floatStr.Length - 1);
+
+                    if (floatStr.EndsWith('.'))
+                        floatStr = floatStr.Substring(0, floatStr.Length - 1);
+                }
+            }
+
+            outStream.WriteString(floatStr);
         }
 
         private void DumpQuotedString(ByteString byteString, OutputStream outStream)
@@ -2239,12 +2280,7 @@ namespace APEDisasm
                 outStream.WriteString($" lag({command.Lag})");
 
             if (command.Occlude != notSetValue)
-            {
-                if (command.Occlude == 0)
-                    outStream.WriteString(" occlude(no)");
-                else
-                    outStream.WriteString(" occlude(yes)");
-            }
+                outStream.WriteString($" occlude({command.Occlude})");
 
             if (command.Restore != notSetValue)
                 outStream.WriteString(" restore");
@@ -2733,6 +2769,7 @@ namespace APEDisasm
 
                 bool shouldEmitImageAsBackground = (hasBackgroundEmittableImage && !hasBackgroundCommand && !hasNoBackgroundFlag);
 
+                List<WindowSwitchCommand> windowSwitchCommands = new List<WindowSwitchCommand>();
                 foreach (IWindowCommand cmd in window.CommandList.Commands)
                 {
                     switch (cmd.WindowCommandType)
@@ -2765,7 +2802,7 @@ namespace APEDisasm
                             DumpXYPrintFXCommand((XYPrintFXCommand)cmd, outStream);
                             break;
                         case WindowCommandType.Switch:
-                            DumpWindowSwitchCommand((WindowSwitchCommand)cmd, outStream);
+                            windowSwitchCommands.Add((WindowSwitchCommand)cmd);
                             break;
                         case WindowCommandType.Body:
                             DumpBodyCommand((BodyCommand)cmd, outStream);
@@ -2785,6 +2822,11 @@ namespace APEDisasm
                 {
                     outStream.WriteLine("background color1=00000000");
                 }
+
+                windowSwitchCommands.Sort(new WindowSwitchCommandComparer());
+
+                foreach (WindowSwitchCommand windowSwitchCommand in windowSwitchCommands)
+                    DumpWindowSwitchCommand(windowSwitchCommand, outStream);
 
                 outStream.WriteLine("");
             }
@@ -2857,8 +2899,10 @@ namespace APEDisasm
             disasmStream.Flush();
         }
 
-        static bool CompareBytes(Stream streamA, Stream streamB, long size)
+        static bool CompareBytes(Stream streamA, Stream streamB, long size, out long failPos)
         {
+            failPos = 0;
+
             if (size == 0)
                 return true;
 
@@ -2873,13 +2917,17 @@ namespace APEDisasm
             {
                 int chunkSize = (int)Math.Min(bufferSize, size - i);
 
+                long basePos = streamA.Position;
                 streamA.Read(bytesA, 0, chunkSize);
                 streamB.Read(bytesB, 0, chunkSize);
 
                 for (int j = 0; j < chunkSize; j++)
                 {
                     if (bytesA[j] != bytesB[j])
+                    {
+                        failPos = basePos + j;
                         return false;
+                    }
                 }
             }
 
@@ -2992,9 +3040,10 @@ namespace APEDisasm
 
                             if (chunkSize > 0)
                             {
-                                if (!CompareBytes(apeFile, recompiledFile, chunkSize))
+                                long failPos = 0;
+                                if (!CompareBytes(apeFile, recompiledFile, chunkSize, out failPos))
                                 {
-                                    failureReasons[sourcePath] = $"FAILED: File contents were different (strict check in range {lastReadStart}..{labelLocation} failed)";
+                                    failureReasons[sourcePath] = $"FAILED: File contents were different (strict check at {failPos} failed)";
                                     return;
                                 }
                             }
@@ -3009,9 +3058,10 @@ namespace APEDisasm
                         }
 
                         long remainderSize = apeFile.Length - lastReadStart;
-                        if (!CompareBytes(apeFile, recompiledFile, remainderSize))
+                        long remainderFailPos = 0;
+                        if (!CompareBytes(apeFile, recompiledFile, remainderSize, out remainderFailPos))
                         {
-                            failureReasons[sourcePath] = $"FAILED: File contents were different (trailing strict check at {lastReadStart} failed)";
+                            failureReasons[sourcePath] = $"FAILED: File contents were different (trailing strict check at {remainderFailPos} failed)";
                             return;
                         }
                     }
