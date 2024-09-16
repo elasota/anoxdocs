@@ -1,5 +1,10 @@
 APE binary grammar:
 
+Partly based on Anoxtools disassembler (2006) by Richard Tew
+https://code.google.com/archive/p/anachronox-modding/
+... with numerous fixes.
+
+
 APEFile:
 	UINT32(317) UINT32(0xffffffff) RootElementList
 
@@ -49,11 +54,11 @@ SwitchCommand:
 	StringCommandByte OptionalString(StringValue) FormattingValue(FormattingValue) OptionalExpression(Expression)
 
 StringCommandByte:
-	BYTE(0)			// = no-op (only emitted for empty switches)
+	BYTE(0)			// = nop (only emitted for empty switches)
 	| BYTE(1)		// = if
-	| BYTE(2)		// = set/unset
-	| BYTE(3)		// = set/unset (string)
-	| BYTE(4)		// = goto (goto "0:0" = return)
+	| BYTE(2)		// = set/unset float
+	| BYTE(3)		// = set/unset string
+	| BYTE(4)		// = goto (return = goto 0:0)
 	| BYTE(5)		// = gosub
 	| BYTE(6)		// = console
 	| BYTE(7)		// = echo
@@ -72,7 +77,6 @@ StringCommandByte:
 	| BYTE(20)		// = loadape
 	| BYTE(21)		// = setfocus
 
-NOTE: goto "0:0" -> return
 
 WindowSwitchCommand:
 	WindowSwitchCommandByte UINT32(Label)
