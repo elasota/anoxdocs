@@ -235,15 +235,17 @@ namespace APEDisasm
     internal class OutputStream
     {
         private Stream _stream;
+        private List<byte> _byteBuffer;
 
         public OutputStream(Stream stream)
         {
             _stream = stream;
+            _byteBuffer = new List<byte>();
         }
 
         public void WriteBytes(byte[] bytes)
         {
-            _stream.Write(bytes, 0, bytes.Length);
+            _byteBuffer.AddRange(bytes);
         }
 
         public void WriteIndent(int indentLevel)
@@ -258,15 +260,15 @@ namespace APEDisasm
                 bytes[3] = 32;
 
                 for (int i = 0; i < indentLevel; i++)
-                    _stream.Write(bytes, 0, 4);
+                    _byteBuffer.AddRange(bytes);
             }
         }
 
         public void WriteLine(string value)
         {
             byte[] encoded = System.Text.Encoding.UTF8.GetBytes(value);
-            _stream.Write(encoded, 0, encoded.Length);
-            _stream.WriteByte(10);
+            _byteBuffer.AddRange(encoded);
+            _byteBuffer.Add(10);
         }
 
         public void WriteLineIndented(int indentLevel, string value)
@@ -278,7 +280,21 @@ namespace APEDisasm
         public void WriteString(string value)
         {
             byte[] encoded = System.Text.Encoding.UTF8.GetBytes(value);
-            _stream.Write(encoded, 0, encoded.Length);
+            _byteBuffer.AddRange(encoded);
+        }
+
+        public void Flush()
+        {
+            byte[] bytes = _byteBuffer.ToArray();
+            _stream.Write(bytes, 0, bytes.Length);
+            _stream.Flush();
+
+            _byteBuffer.Clear();
+        }
+
+        public void RemoveTrailingBytes(int count)
+        {
+            _byteBuffer.RemoveRange(_byteBuffer.Count - count, count);
         }
     }
 
@@ -2697,6 +2713,9 @@ namespace APEDisasm
                 outStream.WriteLine($"#switch {IdToLabel(sw.Label)}");
                 DumpSwitchStatements(0, sw.CommandList, outStream);
             }
+
+            // Needed to accurately reproduce dparse bug with trailing goto statements on unfinished lines, e.g. baltownr
+            outStream.RemoveTrailingBytes(1);
         }
     }
 
@@ -2733,6 +2752,8 @@ namespace APEDisasm
             decompiler.Load(apeFile);
 
             decompiler.Dump(decompileStream);
+
+            decompileStream.Flush();
         }
 
         static void Disassemble(Stream inStream, Stream outStream)
