@@ -148,7 +148,7 @@ When decompiling, if there is an image with a size or non-zero position, no Back
 CamCommand:
 	BYTE(77) String(Name) OptionalString(From) OptionalString(To) OptionalString(Owner)
 		UINT16(Yaw) UINT16(Pitch) UINT16(FOV) UINT16(Far) UINT16(Near) UINT16(Fwd) UINT16(Speed) UINT16(Lift) UINT16(Lag) UINT16(Occlude) UINT16(Restore) UINT16(Zip)
-	// UINT16 values are 0x8001 if absent.  Restore, zip, and occlude are on by default?  (TODO: Check)
+	// UINT16 values are 0x8001 if absent
 
 
 OptionalString:
