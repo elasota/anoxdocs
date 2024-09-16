@@ -1,5 +1,6 @@
 ﻿using System.Diagnostics;
 using System.Globalization;
+using System.Runtime.CompilerServices;
 using System.Xml.Linq;
 
 namespace APEDisasm
@@ -1930,9 +1931,9 @@ namespace APEDisasm
                 if (command.XPos.Expression == null || command.YPos.Expression == null)
                     throw new Exception("Image command with no XPos or YPos");
 
-                outStream.WriteString("image ");
-                DumpQuotedString(command.FileName, outStream);
-                outStream.WriteString(" ");
+                outStream.WriteString("image \"");
+                DumpString(command.FileName, outStream);    // Intentionally not quoted, e.g. for bugaboo
+                outStream.WriteString("\" ");
                 DumpOptimizableExpression(command.XPos.Expression, outStream);
                 outStream.WriteString(", ");
                 DumpOptimizableExpression(command.YPos.Expression, outStream);
@@ -2034,7 +2035,7 @@ namespace APEDisasm
             return (colonPos > 0 && colonPos < (length - 1));
         }
 
-        private static ByteString PadBuggyGoto(ByteString str, bool isLastStatementInBlock, bool isLastExplicitSwitch, bool isLastSwitchInFile)
+        private static ByteString PadBuggyGoto(ByteString str, bool isLastStatementInBlock, bool isLastExplicitSwitch, bool isLastSwitchInFile, out int gotoPaddingChars)
         {
             byte[] bytes = str.Bytes;
 
@@ -2047,17 +2048,13 @@ namespace APEDisasm
                     break;
             }
 
+            gotoPaddingChars = numPadBytes;
+
             if (numPadBytes == 0)
                 return str;
 
             if (numPadBytes == 1)
-            {
-                if (isLastStatementInBlock && isLastSwitchInFile)
-                    return str;
-
-                //throw new Exception("Don't know how to handle buggy goto with single-byte padding");
                 return str;
-            }
 
             {
                 byte[] newBytes = new byte[bytes.Length];
@@ -2401,9 +2398,10 @@ namespace APEDisasm
             }
         }
 
-        private void DumpGotoCommand(SwitchCommand cmd, OutputStream outStream, bool isLastStatementInBlock, bool isLastExplicitSwitch, bool isLastSwitchInFile, out bool isReturnStatement)
+        private void DumpGotoCommand(SwitchCommand cmd, OutputStream outStream, bool isLastStatementInBlock, bool isLastExplicitSwitch, bool isLastSwitchInFile, out bool isReturn, out int gotoPaddingChars)
         {
-            isReturnStatement = false;
+            isReturn = false;
+            gotoPaddingChars = 0;
 
             if (cmd.Str.Value == null)
                 throw new Exception("Goto command missing argument");
@@ -2412,21 +2410,22 @@ namespace APEDisasm
 
             if (target.Length == 3 && target[0] == 48 && target[1] == 58 && target[2] == 48)
             {
-                isReturnStatement = true;
+                isReturn = true;
                 outStream.WriteString("return");
                 return;
             }
 
-            ByteString fixedUpLabel = PadBuggyGoto(cmd.Str.Value, isLastStatementInBlock, isLastExplicitSwitch, isLastSwitchInFile);
+            ByteString fixedUpLabel = PadBuggyGoto(cmd.Str.Value, isLastStatementInBlock, isLastExplicitSwitch, isLastSwitchInFile, out gotoPaddingChars);
 
             outStream.WriteString("goto ");
             DumpString(fixedUpLabel, outStream);
             DumpFormattingValue(cmd.FormattingValue, outStream);
         }
 
-        private void DumpSwitchCommand(SwitchCommand cmd, OutputStream outStream, bool isLastStatementInBlock, bool isLastExplicitSwitch, bool isLastSwitchInFile, out bool isReturnStatement)
+        private void DumpSwitchCommand(SwitchCommand cmd, OutputStream outStream, bool isLastStatementInBlock, bool isLastExplicitSwitch, bool isLastSwitchInFile, out bool isReturn, out int gotoPaddingChars)
         {
-            isReturnStatement = false;
+            gotoPaddingChars = 0;
+            isReturn = false;
 
             switch (cmd.CommandType)
             {
@@ -2443,7 +2442,7 @@ namespace APEDisasm
                     break;
 
                 case SwitchCommand.ECommandType.GotoCommand:
-                    DumpGotoCommand(cmd, outStream, isLastStatementInBlock, isLastExplicitSwitch, isLastSwitchInFile, out isReturnStatement);
+                    DumpGotoCommand(cmd, outStream, isLastStatementInBlock, isLastExplicitSwitch, isLastSwitchInFile, out isReturn, out gotoPaddingChars);
                     break;
 
                 case SwitchCommand.ECommandType.GoSubCommand:
@@ -2622,14 +2621,23 @@ namespace APEDisasm
                 else
                 {
                     bool isLastStatementInBlock = (containsLastStatement && stmt.NextUnconditional == null);
-                    bool isReturnStatement;
+                    bool isReturn;
+                    int gotoPaddingChars;
 
                     outStream.WriteBytes(indentBytes);
-                    DumpSwitchCommand(cmd, outStream, isLastStatementInBlock, isLastExplicitSwitch, isLastSwitchInFile, out isReturnStatement);
+                    DumpSwitchCommand(cmd, outStream, isLastStatementInBlock, isLastExplicitSwitch, isLastSwitchInFile, out isReturn, out gotoPaddingChars);
 
                     bool suppressNewline = false;
 
-                    if (isReturnStatement && isLastExplicitSwitch && isLastStatementInBlock)
+                    if (isReturn && isLastExplicitSwitch && isLastStatementInBlock)
+                        suppressNewline = true;
+
+                    // Global53 crash
+                    if (cmd.CommandType == SwitchCommand.ECommandType.GotoCommand && !isReturn && isLastStatementInBlock && !isLastSwitchInFile && isLastExplicitSwitch && gotoPaddingChars == 0)
+                        suppressNewline = true;
+
+                    // crevice99 crash
+                    if (cmd.CommandType == SwitchCommand.ECommandType.ExternCommand && isLastStatementInBlock && isLastExplicitSwitch)
                         suppressNewline = true;
 
                     if (!suppressNewline)
@@ -2908,7 +2916,7 @@ namespace APEDisasm
             return true;
         }
 
-        static void ValidateFile(string apePath, string sourcePath, string dparsePath, IReadOnlySet<long>? labelLocations)
+        static void ValidateFile(string apePath, string sourcePath, string dparsePath, IReadOnlySet<long>? labelLocations, IDictionary<string, string> failureReasons)
         {
             if (labelLocations == null)
                 throw new Exception("Internal error: No label location tracker");
@@ -2924,7 +2932,7 @@ namespace APEDisasm
             string recompiledPath = Path.ChangeExtension(sourcePath, "ape");
             if (File.Exists(recompiledPath))
             {
-                Console.WriteLine("FAILED: Compiled output already exists");
+                failureReasons[sourcePath] = "Compiled output already exists";
                 return;
             }
 
@@ -2932,6 +2940,7 @@ namespace APEDisasm
             {
                 List<string> args = new List<string>();
 
+                args.Add("-q");
                 args.Add(Path.GetFileName(sourcePath));
 
                 string? sourceDir = Path.GetDirectoryName(sourcePath);
@@ -2946,7 +2955,7 @@ namespace APEDisasm
 
                 if (process == null)
                 {
-                    Console.WriteLine("FAILED: dparse didn't start");
+                    failureReasons[sourcePath] = "dparse didn't start";
                     return;
                 }
 
@@ -2955,7 +2964,7 @@ namespace APEDisasm
 
                 if (process.ExitCode != 0)
                 {
-                    Console.WriteLine("FAILED: dparse crashed");
+                    failureReasons[sourcePath] = "dparse crashed";
                     return;
                 }
 
@@ -2966,9 +2975,9 @@ namespace APEDisasm
                         if (apeFile.Length != recompiledFile.Length)
                         {
                             if (recompiledFile.Length == 0)
-                                Console.WriteLine("FAILED: dparse compile failed");
+                                failureReasons[sourcePath] = "dparse compile failed";
                             else
-                                Console.WriteLine("FAILED: File lengths are different");
+                                failureReasons[sourcePath] = "File lengths are different";
                             return;
                         }
 
@@ -2981,14 +2990,14 @@ namespace APEDisasm
                             {
                                 if (!CompareBytes(apeFile, recompiledFile, chunkSize))
                                 {
-                                    Console.WriteLine($"FAILED: File contents were different (strict check in range {lastReadStart}..{labelLocation} failed)");
+                                    failureReasons[sourcePath] = $"FAILED: File contents were different (strict check in range {lastReadStart}..{labelLocation} failed)";
                                     return;
                                 }
                             }
 
                             if (!CompareLabels(apeFile, recompiledFile))
                             {
-                                Console.WriteLine($"FAILED: File contents were different (label compare check at {labelLocation} failed)");
+                                failureReasons[sourcePath] = $"FAILED: File contents were different (label compare check at {labelLocation} failed)";
                                 return;
                             }
 
@@ -2998,7 +3007,7 @@ namespace APEDisasm
                         long remainderSize = apeFile.Length - lastReadStart;
                         if (!CompareBytes(apeFile, recompiledFile, remainderSize))
                         {
-                            Console.WriteLine($"FAILED: File contents were different (trailing strict check at {lastReadStart} failed)");
+                            failureReasons[sourcePath] = $"FAILED: File contents were different (trailing strict check at {lastReadStart} failed)";
                             return;
                         }
                     }
@@ -3021,7 +3030,7 @@ namespace APEDisasm
             }
         }
 
-        static void DisassembleSingleFile(string inputPath, string outputPath, bool sourceMode, bool validateMode, string dparsePath)
+        static void DisassembleSingleFile(string inputPath, string outputPath, bool sourceMode, bool validateMode, string dparsePath, IDictionary<string, string> failureReasons)
         {
             IReadOnlySet<long>? labelLocations = null;
 
@@ -3046,11 +3055,11 @@ namespace APEDisasm
 
             if (validateMode && sourceMode)
             {
-                ValidateFile(inputPath, outputPath, dparsePath, labelLocations);
+                ValidateFile(inputPath, outputPath, dparsePath, labelLocations, failureReasons);
             }
         }
 
-        static void DisassembleDirectory(string inputPath, string outputPath, bool sourceMode, bool validateMode, string dparsePath)
+        static void DisassembleDirectory(string inputPath, string outputPath, bool sourceMode, bool validateMode, string dparsePath, IDictionary<string, string> failureReasons)
         {
             string[] inputPathFiles = Directory.GetFiles(inputPath);
 
@@ -3062,7 +3071,7 @@ namespace APEDisasm
                 string outPath = Path.Combine(outputPath, fileName);
 
                 Console.WriteLine($"Disassembling {Path.GetFileName(fullPathStr)}");
-                DisassembleSingleFile(fullPathStr, outPath, sourceMode, validateMode, dparsePath);
+                DisassembleSingleFile(fullPathStr, outPath, sourceMode, validateMode, dparsePath, failureReasons);
             }
         }
 
@@ -3127,10 +3136,29 @@ namespace APEDisasm
             string inputPath = args[endOpts];
             string outputPath = args[endOpts + 1];
 
+            Dictionary<string, string> failureReasons = new Dictionary<string, string>();
+
             if (dirMode)
-                DisassembleDirectory(inputPath, outputPath, sourceMode, validateMode, validatePath);
+                DisassembleDirectory(inputPath, outputPath, sourceMode, validateMode, validatePath, failureReasons);
             else
-                DisassembleSingleFile(inputPath, outputPath, sourceMode, validateMode, validatePath);
+                DisassembleSingleFile(inputPath, outputPath, sourceMode, validateMode, validatePath, failureReasons);
+
+            if (failureReasons.Count > 0)
+            {
+                Console.Error.WriteLine("Failure report:");
+
+                List<string> sortedKeys = new List<string>();
+                sortedKeys.AddRange(failureReasons.Keys);
+                sortedKeys.Sort();
+
+                foreach (string key in sortedKeys)
+                {
+                    string fileName = Path.GetFileName(key);
+                    string reason = failureReasons[key];
+
+                    Console.Error.WriteLine($"{fileName}: {reason}");
+                }
+            }
         }
     }
 }
