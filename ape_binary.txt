@@ -244,3 +244,18 @@ In the case of "if" instructions, the first instruction in the true case is (CC 
 the first instruction in the false case is (CC << 2) + 2, and the continuation after the true and false cases is  (CC << 2) + 3
 
 In the case of "while" instructions, the inner loop starts at (CC << 2) + 1, and the loop exits at (CC << 2) + 3
+
+
+NOTE on inline switch IDs:
+Switch IDs 0..999999999 are from IDs emitted in the files.
+
+Inlined switch IDs start at 1000000000
+
+The formula for calculating an inline switch ID is:
+1000000000 + (filename_checksum % 100000) * 10000
+
+The formula for computing the filename checksum is to take the ASCII characters of the filename, without the file extension, and compute the checksum as follows:
+
+Checksum = 0
+For each character:
+    Checksum = (Checksum & 0x7ffffff) * 31 + Character
