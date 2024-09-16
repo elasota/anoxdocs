@@ -1199,7 +1199,7 @@ namespace APEDisasm
             if (Height.Expression != null)
                 return false;
 
-            if (Flags != 0)
+            if (HasFlag(EImageFlagBit.Solid))
                 return false;
 
             return true;
@@ -1934,7 +1934,7 @@ namespace APEDisasm
                     outStream.WriteString(", stretch");
                 if (command.HasFlag(ImageCommand.EImageFlagBit.Tile))
                     outStream.WriteString(", tile");
-                if (command.HasFlag(ImageCommand.EImageFlagBit.Tile))
+                if (command.HasFlag(ImageCommand.EImageFlagBit.Solid))
                     outStream.WriteString(", solid");
             }
 
