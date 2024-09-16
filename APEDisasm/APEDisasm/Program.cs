@@ -1717,8 +1717,8 @@ namespace APEDisasm
         private void DumpTalkCommand(TalkCommand command, OutputStream outStream)
         {
             // Syntaxes:
-            // "talk npc" -> Name1 == _click_, Name2 = playerchar0, nostay applies to Stay2
-            // "talk player" -> Name1 = playerchar0, Name2 = _click_, nostay applies to Stay2
+            // "talk player" -> Name1 == _click_, Name2 = playerchar0, nostay applies to Stay2
+            // "talk npc" -> Name1 = playerchar0, Name2 = _click_, nostay applies to Stay2
 
             if (command.Animation2.Value != null)
             {
@@ -1747,9 +1747,9 @@ namespace APEDisasm
             else
             {
                 if (command.Name1.Equals(_talkClickConstStr) && command.Name2.Equals(_talkPlayerChar0ConstStr))
-                    outStream.WriteString("talk player ");
-                else if (command.Name2.Equals(_talkClickConstStr) && command.Name1.Equals(_talkPlayerChar0ConstStr))
                     outStream.WriteString("talk npc ");
+                else if (command.Name1.Equals(_talkPlayerChar0ConstStr) && command.Name2.Equals(_talkClickConstStr))
+                    outStream.WriteString("talk player ");
                 else
                     throw new Exception("Unhandled talk command configuration");
 
