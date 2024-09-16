@@ -1599,6 +1599,8 @@ namespace APEDisasm
         private APEFile _apeFile;
         private ByteString _talkPlayerChar0ConstStr;
         private ByteString _talkClickConstStr;
+        private Switch? _lastExplicitSwitch;
+        private Switch? _lastSwitchInFile;
 
         public Decompiler()
         {
@@ -2031,9 +2033,43 @@ namespace APEDisasm
             return (colonPos > 0 && colonPos < (length - 1));
         }
 
+        private static ByteString PadBuggyGoto(ByteString str)
+        {
+            byte[] bytes = str.Bytes;
+
+            int numPadBytes = 0;
+            for (int i = 0; i < bytes.Length; i++)
+            {
+                if (bytes[bytes.Length - 1 - i] == 32)
+                    numPadBytes++;
+                else
+                    break;
+            }
+
+            if (numPadBytes == 0)
+                return str;
+
+            if (numPadBytes == 1)
+                throw new Exception("Couldn't figure out how to reproduce buggy goto pad bytes with only 1 byte");
+
+            {
+                byte[] newBytes = new byte[bytes.Length];
+                for (int i = 0; i < bytes.Length; i++)
+                    newBytes[i] = bytes[i];
+
+                bytes = newBytes;
+            }
+
+            bytes[bytes.Length - 2] = 47;
+            bytes[bytes.Length - 1] = 47;
+
+            return new ByteString(bytes);
+        }
+
         private void DumpSimpleStringCommand(SimpleStringCommand command, OutputStream outStream)
         {
             bool isQuoted = true;
+            ByteString commandStr = command.CommandStr;
 
             switch (command.CommandType)
             {
@@ -2051,7 +2087,10 @@ namespace APEDisasm
                     break;
                 case SimpleStringCommand.ECommandType.NextWindowCommand:
                     if (IsStringSimpleLabel(command.CommandStr.Bytes))
+                    {
                         outStream.WriteString("goto ");
+                        commandStr = PadBuggyGoto(commandStr);
+                    }
                     else
                         outStream.WriteString("nextwindow ");
 
@@ -2062,9 +2101,9 @@ namespace APEDisasm
             }
 
             if (isQuoted)
-                DumpQuotedString(command.CommandStr, outStream);
+                DumpQuotedString(commandStr, outStream);
             else
-                DumpString(command.CommandStr, outStream);
+                DumpString(commandStr, outStream);
 
             outStream.WriteLine("");
         }
@@ -2625,6 +2664,14 @@ namespace APEDisasm
 
         public void Dump(OutputStream outStream)
         {
+            foreach (Switch sw in _apeFile.RootElementList.Switches.SwitchList)
+            {
+                _lastSwitchInFile = sw;
+
+                if (sw.Label < 1000000000)
+                    _lastSwitchInFile = sw;
+            }
+
             foreach (Window window in _apeFile.RootElementList.Windows)
             {
                 outStream.WriteLine($"#window {IdToLabel(window.WindowId)}");
@@ -2710,12 +2757,10 @@ namespace APEDisasm
                 if (_inlinedSwitches.Contains(sw.Label))
                     continue;
 
+                outStream.WriteLine("");
                 outStream.WriteLine($"#switch {IdToLabel(sw.Label)}");
                 DumpSwitchStatements(0, sw.CommandList, outStream);
             }
-
-            // Needed to accurately reproduce dparse bug with trailing goto statements on unfinished lines, e.g. baltownr
-            outStream.RemoveTrailingBytes(1);
         }
     }
 
@@ -2760,9 +2805,19 @@ namespace APEDisasm
         {
             OutputStream disasmStream = new OutputStream(outStream);
 
-            APEFile apeFile = new APEFile();
+            try
+            {
+                APEFile apeFile = new APEFile();
 
-            apeFile.Load(new InputStream(inStream), disasmStream);
+                apeFile.Load(new InputStream(inStream), disasmStream);
+            }
+            catch (Exception)
+            {
+                disasmStream.Flush();
+                throw;
+            }
+
+            disasmStream.Flush();
         }
 
         static bool CompareBytes(Stream streamA, Stream streamB, long size)
