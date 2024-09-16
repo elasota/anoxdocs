@@ -1,4 +1,5 @@
-﻿using System.Globalization;
+﻿using System.Diagnostics;
+using System.Globalization;
 
 namespace APEDisasm
 {
@@ -1715,11 +1716,13 @@ namespace APEDisasm
             else
             {
                 if (command.Name1.Equals(_talkClickConstStr) && command.Name2.Equals(_talkPlayerChar0ConstStr))
-                    outStream.WriteString("talk player");
+                    outStream.WriteString("talk player ");
                 else if (command.Name2.Equals(_talkClickConstStr) && command.Name1.Equals(_talkPlayerChar0ConstStr))
-                    outStream.WriteString("talk npc");
+                    outStream.WriteString("talk npc ");
                 else
                     throw new Exception("Unhandled talk command configuration");
+
+                DumpString(command.Animation1, outStream);
 
                 if (command.Stay2Flag == 0)
                     outStream.WriteString(" nostay");
@@ -1759,7 +1762,7 @@ namespace APEDisasm
                     outStream.WriteString(" == ");
                     break;
                 case ExpressionValue.EOperator.Neq:
-                    outStream.WriteString(" !=> ");
+                    outStream.WriteString(" != ");
                     break;
                 case ExpressionValue.EOperator.Add:
                     outStream.WriteString(" + ");
@@ -1801,7 +1804,7 @@ namespace APEDisasm
                     DumpString(((StringOperand)operand).Value, outStream);
                     break;
                 case ExpressionValue.EOperandType.StringConst:
-                    DumpString(((QuotedStringOperand)operand).Value, outStream);
+                    DumpQuotedString(((QuotedStringOperand)operand).Value, outStream);
                     break;
 
                 default:
@@ -2250,7 +2253,7 @@ namespace APEDisasm
             byte[] newBytes = new byte[end - start];
 
             for (int i = start; i < end; i++)
-                newBytes[i - start] = bytes[start];
+                newBytes[i - start] = bytes[i];
 
             return newBytes;
         }
@@ -2662,7 +2665,6 @@ namespace APEDisasm
 
                 outStream.WriteLine($"#switch {IdToLabel(sw.Label)}");
                 DumpSwitchStatements(0, sw.CommandList, outStream);
-                outStream.WriteLine("");
             }
         }
     }
@@ -2672,7 +2674,10 @@ namespace APEDisasm
 
         static void PrintUsage()
         {
-            Console.Error.WriteLine("Syntax: APEDisasm [-src] <input> <output>");
+            Console.Error.WriteLine("Syntax: APEDisasm [options] <input> <output>");
+            Console.Error.WriteLine("Options:");
+            Console.Error.WriteLine("    -src                            Decompile to source code");
+            Console.Error.WriteLine("    -validate <path to dparse.exe>  Validate decompiled results");
             Environment.ExitCode = -1;
         }
 
@@ -2699,7 +2704,91 @@ namespace APEDisasm
             apeFile.Load(new InputStream(inStream), disasmStream);
         }
 
-        static void DisassembleSingleFile(string inputPath, string outputPath, bool sourceMode)
+        static void ValidateFile(string apePath, string sourcePath, string dparsePath)
+        {
+            Console.WriteLine("Validating {0}", sourcePath);
+
+            string recompiledPath = Path.ChangeExtension(sourcePath, "ape");
+            if (File.Exists(recompiledPath))
+            {
+                Console.WriteLine("FAILED: Compiled output already exists");
+                return;
+            }
+
+            try
+            {
+                List<string> args = new List<string>();
+
+                args.Add(Path.GetFileName(sourcePath));
+
+                string sourceDir = Path.GetDirectoryName(sourcePath);
+
+
+                ProcessStartInfo psi = new ProcessStartInfo(dparsePath, args);
+                psi.WorkingDirectory = sourceDir;
+
+
+                System.Diagnostics.Process process = System.Diagnostics.Process.Start(psi);
+                process.WaitForExit();
+
+                if (process.ExitCode != 0)
+                {
+                    Console.WriteLine("FAILED: dparse crashed");
+                    return;
+                }
+
+                using (FileStream apeFile = new FileStream(apePath, FileMode.Open, FileAccess.Read))
+                {
+                    using (FileStream recompiledFile = new FileStream(recompiledPath, FileMode.Open, FileAccess.Read))
+                    {
+                        if (apeFile.Length != recompiledFile.Length)
+                        {
+                            if (recompiledFile.Length == 0)
+                                Console.WriteLine("FAILED: dparse compile failed");
+                            else
+                                Console.WriteLine("FAILED: File lengths are different");
+                            return;
+                        }
+
+                        byte[] apeBytes = new byte[1024];
+                        byte[] recompiledBytes = new byte[apeBytes.Length];
+
+                        for (int i = 0; i < apeFile.Length; i += apeBytes.Length)
+                        {
+                            int chunkSize = (int)Math.Min((long)apeBytes.Length, apeFile.Length - i);
+                            apeFile.Read(apeBytes, 0, chunkSize);
+                            recompiledFile.Read(recompiledBytes, 0, chunkSize);
+
+                            for (int j = 0; j < chunkSize; j++)
+                            {
+                                if (apeBytes[j] != recompiledBytes[j])
+                                {
+                                    Console.WriteLine("FAILED: File contents were different");
+                                    return;
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Console.WriteLine("PASSED");
+            }
+            finally
+            {
+                if (File.Exists(recompiledPath))
+                {
+                    try
+                    {
+                        File.Delete(recompiledPath);
+                    }
+                    catch (Exception)
+                    {
+                    }
+                }
+            }
+        }
+
+        static void DisassembleSingleFile(string inputPath, string outputPath, bool sourceMode, bool validateMode, string dparsePath)
         {
             using (FileStream inFile = new FileStream(inputPath, FileMode.Open, FileAccess.Read))
             {
@@ -2719,9 +2808,14 @@ namespace APEDisasm
                     }
                 }
             }
+
+            if (validateMode && sourceMode)
+            {
+                ValidateFile(inputPath, outputPath, dparsePath);
+            }
         }
 
-        static void DisassembleDirectory(string inputPath, string outputPath, bool sourceMode)
+        static void DisassembleDirectory(string inputPath, string outputPath, bool sourceMode, bool validateMode, string dparsePath)
         {
             string[] inputPathFiles = Directory.GetFiles(inputPath);
 
@@ -2733,7 +2827,7 @@ namespace APEDisasm
                 string outPath = Path.Combine(outputPath, fileName);
 
                 Console.WriteLine($"Disassembling {Path.GetFileName(fullPathStr)}");
-                DisassembleSingleFile(fullPathStr, outPath, sourceMode);
+                DisassembleSingleFile(fullPathStr, outPath, sourceMode, validateMode, dparsePath);
             }
         }
 
@@ -2742,6 +2836,7 @@ namespace APEDisasm
             bool sourceMode = false;
             bool validateMode = false;
             bool dirMode = false;
+            string validatePath = "";
 
             if (args.Length < 2)
             {
@@ -2758,7 +2853,17 @@ namespace APEDisasm
                 if (opt == "-src")
                     sourceMode = true;
                 else if (opt == "-validate")
+                {
                     validateMode = true;
+                    endOpts++;
+                    if (endOpts == args.Length)
+                    {
+                        PrintUsage();
+                        return;
+                    }
+
+                    validatePath = args[endOpts];
+                }
                 else if (opt == "-dir")
                     dirMode = true;
                 else if (opt.StartsWith("-") && opt != "-")
@@ -2778,13 +2883,19 @@ namespace APEDisasm
                 return;
             }
 
+            if (validateMode && !sourceMode)
+            {
+                PrintUsage();
+                return;
+            }
+
             string inputPath = args[endOpts];
             string outputPath = args[endOpts + 1];
 
             if (dirMode)
-                DisassembleDirectory(inputPath, outputPath, sourceMode);
+                DisassembleDirectory(inputPath, outputPath, sourceMode, validateMode, validatePath);
             else
-                DisassembleSingleFile(inputPath, outputPath, sourceMode);
+                DisassembleSingleFile(inputPath, outputPath, sourceMode, validateMode, validatePath);
         }
     }
 }
