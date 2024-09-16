@@ -2066,26 +2066,31 @@ namespace APEDisasm
             switch (command.CommandType)
             {
                 case WindowSwitchCommand.ECommandType.StartSwitchCommand:
-                    outStream.WriteLine("startswitch {");
+                    outStream.WriteString("startswitch ");
                     break;
                 case WindowSwitchCommand.ECommandType.ThinkSwitchCommand:
-                    outStream.WriteLine("thinkswitch {");
+                    outStream.WriteString("thinkswitch ");
                     break;
                 case WindowSwitchCommand.ECommandType.FinishSwitchCommand:
-                    outStream.WriteLine("finishswitch {");
+                    outStream.WriteString("finishswitch ");
                     break;
 
                 default:
                     throw new Exception("Unknown window switch command type");
             }
 
-            Switch sw = _idToSwitch[command.Label];
+            if (command.Label >= 1000000000)
+            {
+                outStream.WriteLine("{");
+                Switch sw = _idToSwitch[command.Label];
 
-            DumpSwitchStatements(1, sw.CommandList, outStream);
+                DumpSwitchStatements(1, sw.CommandList, outStream);
 
-            _inlinedSwitches.Add(command.Label);
-
-            outStream.WriteLine("}");
+                _inlinedSwitches.Add(command.Label);
+                outStream.WriteLine("}");
+            }
+            else
+                outStream.WriteLine(IdToLabel(command.Label));
         }
 
         private void DumpCamCommand(CamCommand command, OutputStream outStream)
@@ -2162,7 +2167,7 @@ namespace APEDisasm
 
         private void DumpBackgroundCommand(BackgroundCommand command, OutputStream outStream)
         {
-            outStream.WriteString("background ");
+            outStream.WriteString("background");
 
             if (command.Color1 != 0)
                 outStream.WriteString(" color1=" + BackgroundCommand.ColorToHex(command.Color1));
@@ -2461,25 +2466,32 @@ namespace APEDisasm
 
                     DumpChainedStatementBlock(indent + 1, false, trueCaseStmt, outStream);
 
+                    bool isTrailingBrace = false;
                     if (!isTrueCaseSingleCommand)
                     {
                         outStream.WriteBytes(indentBytes);
                         outStream.WriteString("}");
-                        if (falseCaseStmt != null)
-                            outStream.WriteString(" ");
+                        isTrailingBrace = true;
                     }
 
                     if (falseCaseStmt != null)
                     {
+                        if (isTrailingBrace)
+                            outStream.WriteString(" ");
+                        else
+                            outStream.WriteBytes(indentBytes);
+
                         bool isFalseCaseSingleCommand = false;
                         bool isElseIf = false;
                         if (falseCaseStmt.Command.CommandType != SwitchCommand.ECommandType.WhileCommand && falseCaseStmt.NextUnconditional == null)
                         {
                             isFalseCaseSingleCommand = true;
-                            if (falseCaseStmt.Command.CommandType != SwitchCommand.ECommandType.IfCommand)
+                            if (falseCaseStmt.Command.CommandType == SwitchCommand.ECommandType.IfCommand)
                                 isElseIf = true;
                         }
 
+
+                        isTrailingBrace = false;
                         if (isElseIf)
                         {
                             outStream.WriteString("else ");
@@ -2495,14 +2507,13 @@ namespace APEDisasm
                             outStream.WriteLine("else {");
                             outStream.WriteBytes(indentBytes);
                             DumpChainedStatementBlock(indent + 1, false, falseCaseStmt, outStream);
-                            outStream.WriteLine("}");
+                            outStream.WriteString("}");
+                            isTrailingBrace = true;
                         }
                     }
-                    else
-                    {
-                        if (!isTrueCaseSingleCommand)
-                            outStream.WriteLine("");
-                    }
+
+                    if (isTrailingBrace)
+                        outStream.WriteLine("");
                 }
                 else
                 {
@@ -2651,7 +2662,7 @@ namespace APEDisasm
 
                 outStream.WriteLine($"#switch {IdToLabel(sw.Label)}");
                 DumpSwitchStatements(0, sw.CommandList, outStream);
-
+                outStream.WriteLine("");
             }
         }
     }
