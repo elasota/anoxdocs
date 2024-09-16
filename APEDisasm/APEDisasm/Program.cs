@@ -1,5 +1,6 @@
 ﻿using System.Diagnostics;
 using System.Globalization;
+using System.Xml.Linq;
 
 namespace APEDisasm
 {
@@ -2033,7 +2034,7 @@ namespace APEDisasm
             return (colonPos > 0 && colonPos < (length - 1));
         }
 
-        private static ByteString PadBuggyGoto(ByteString str)
+        private static ByteString PadBuggyGoto(ByteString str, bool isLastStatementInBlock, bool isLastExplicitSwitch, bool isLastSwitchInFile)
         {
             byte[] bytes = str.Bytes;
 
@@ -2050,7 +2051,13 @@ namespace APEDisasm
                 return str;
 
             if (numPadBytes == 1)
-                throw new Exception("Couldn't figure out how to reproduce buggy goto pad bytes with only 1 byte");
+            {
+                if (isLastStatementInBlock && isLastSwitchInFile)
+                    return str;
+
+                //throw new Exception("Don't know how to handle buggy goto with single-byte padding");
+                return str;
+            }
 
             {
                 byte[] newBytes = new byte[bytes.Length];
@@ -2087,10 +2094,7 @@ namespace APEDisasm
                     break;
                 case SimpleStringCommand.ECommandType.NextWindowCommand:
                     if (IsStringSimpleLabel(command.CommandStr.Bytes))
-                    {
                         outStream.WriteString("goto ");
-                        commandStr = PadBuggyGoto(commandStr);
-                    }
                     else
                         outStream.WriteString("nextwindow ");
 
@@ -2173,7 +2177,7 @@ namespace APEDisasm
                 outStream.WriteLine("{");
                 Switch sw = _idToSwitch[command.Label];
 
-                DumpSwitchStatements(1, sw.CommandList, outStream);
+                DumpSwitchStatements(1, sw.CommandList, outStream, sw == _lastExplicitSwitch, sw == _lastSwitchInFile);
 
                 _inlinedSwitches.Add(command.Label);
                 outStream.WriteLine("}");
@@ -2397,8 +2401,10 @@ namespace APEDisasm
             }
         }
 
-        private void DumpGotoCommand(SwitchCommand cmd, OutputStream outStream)
+        private void DumpGotoCommand(SwitchCommand cmd, OutputStream outStream, bool isLastStatementInBlock, bool isLastExplicitSwitch, bool isLastSwitchInFile, out bool isReturnStatement)
         {
+            isReturnStatement = false;
+
             if (cmd.Str.Value == null)
                 throw new Exception("Goto command missing argument");
 
@@ -2406,15 +2412,22 @@ namespace APEDisasm
 
             if (target.Length == 3 && target[0] == 48 && target[1] == 58 && target[2] == 48)
             {
+                isReturnStatement = true;
                 outStream.WriteString("return");
                 return;
             }
 
-            DumpSimpleSwitchCommand("goto", cmd, false, outStream);
+            ByteString fixedUpLabel = PadBuggyGoto(cmd.Str.Value, isLastStatementInBlock, isLastExplicitSwitch, isLastSwitchInFile);
+
+            outStream.WriteString("goto ");
+            DumpString(fixedUpLabel, outStream);
+            DumpFormattingValue(cmd.FormattingValue, outStream);
         }
 
-        private void DumpSwitchCommand(SwitchCommand cmd, OutputStream outStream)
+        private void DumpSwitchCommand(SwitchCommand cmd, OutputStream outStream, bool isLastStatementInBlock, bool isLastExplicitSwitch, bool isLastSwitchInFile, out bool isReturnStatement)
         {
+            isReturnStatement = false;
+
             switch (cmd.CommandType)
             {
                 case SwitchCommand.ECommandType.NoOpCommand:
@@ -2430,7 +2443,7 @@ namespace APEDisasm
                     break;
 
                 case SwitchCommand.ECommandType.GotoCommand:
-                    DumpGotoCommand(cmd, outStream);
+                    DumpGotoCommand(cmd, outStream, isLastStatementInBlock, isLastExplicitSwitch, isLastSwitchInFile, out isReturnStatement);
                     break;
 
                 case SwitchCommand.ECommandType.GoSubCommand:
@@ -2507,7 +2520,7 @@ namespace APEDisasm
             return (ctype == SwitchCommand.ECommandType.IfCommand || ctype == SwitchCommand.ECommandType.WhileCommand);
         }
 
-        private void DumpChainedStatementBlock(int indent, bool skipInitialIndent, ChainedStatement? stmt, OutputStream outStream)
+        private void DumpChainedStatementBlock(int indent, bool skipInitialIndent, ChainedStatement? stmt, OutputStream outStream, bool containsLastStatement, bool isLastExplicitSwitch, bool isLastSwitchInFile)
         {
             int numIndentChars = indent * 2;
 
@@ -2553,7 +2566,8 @@ namespace APEDisasm
                         outStream.WriteString(" {");
                     outStream.WriteLine("");
 
-                    DumpChainedStatementBlock(indent + 1, false, trueCaseStmt, outStream);
+                    bool trueCaseContainsLastStatement = (containsLastStatement && isTrueCaseSingleCommand && stmt.NextUnconditional == null && stmt.FalseCase == null);
+                    DumpChainedStatementBlock(indent + 1, false, trueCaseStmt, outStream, trueCaseContainsLastStatement, isLastExplicitSwitch, isLastSwitchInFile);
 
                     bool isTrailingBrace = false;
                     if (!isTrueCaseSingleCommand)
@@ -2579,23 +2593,24 @@ namespace APEDisasm
                                 isElseIf = true;
                         }
 
+                        bool falseCaseContainsLastStatement = (containsLastStatement && isFalseCaseSingleCommand && stmt.NextUnconditional == null);
 
                         isTrailingBrace = false;
                         if (isElseIf)
                         {
                             outStream.WriteString("else ");
-                            DumpChainedStatementBlock(indent, true, falseCaseStmt, outStream);
+                            DumpChainedStatementBlock(indent, true, falseCaseStmt, outStream, falseCaseContainsLastStatement, isLastExplicitSwitch, isLastSwitchInFile);
                         }
                         else if (isFalseCaseSingleCommand)
                         {
                             outStream.WriteLine("else");
-                            DumpChainedStatementBlock(indent + 1, false, falseCaseStmt, outStream);
+                            DumpChainedStatementBlock(indent + 1, false, falseCaseStmt, outStream, falseCaseContainsLastStatement, isLastExplicitSwitch, isLastSwitchInFile);
                         }
                         else
                         {
                             outStream.WriteLine("else {");
                             outStream.WriteBytes(indentBytes);
-                            DumpChainedStatementBlock(indent + 1, false, falseCaseStmt, outStream);
+                            DumpChainedStatementBlock(indent + 1, false, falseCaseStmt, outStream, false, isLastExplicitSwitch, isLastSwitchInFile);
                             outStream.WriteString("}");
                             isTrailingBrace = true;
                         }
@@ -2606,9 +2621,19 @@ namespace APEDisasm
                 }
                 else
                 {
+                    bool isLastStatementInBlock = (containsLastStatement && stmt.NextUnconditional == null);
+                    bool isReturnStatement;
+
                     outStream.WriteBytes(indentBytes);
-                    DumpSwitchCommand(cmd, outStream);
-                    outStream.WriteLine("");
+                    DumpSwitchCommand(cmd, outStream, isLastStatementInBlock, isLastExplicitSwitch, isLastSwitchInFile, out isReturnStatement);
+
+                    bool suppressNewline = false;
+
+                    if (isReturnStatement && isLastExplicitSwitch && isLastStatementInBlock)
+                        suppressNewline = true;
+
+                    if (!suppressNewline)
+                        outStream.WriteLine("");
                 }
 
                 stmt = stmt.NextUnconditional;
@@ -2616,7 +2641,7 @@ namespace APEDisasm
             }
         }
 
-        private void DumpSwitchStatements(int startIndent, SwitchCommandList commandList, OutputStream outStream)
+        private void DumpSwitchStatements(int startIndent, SwitchCommandList commandList, OutputStream outStream, bool isLastExplicitSwitch, bool isLastSwitchInFile)
         {
             Dictionary<ulong, ChainedStatement> ccToStatement = new Dictionary<ulong, ChainedStatement>();
 
@@ -2659,7 +2684,7 @@ namespace APEDisasm
 
             ChainedStatement? firstStatement = null;
             if (ccToStatement.TryGetValue(1, out firstStatement))
-                DumpChainedStatementBlock(startIndent, false, firstStatement, outStream);
+                DumpChainedStatementBlock(startIndent, false, firstStatement, outStream, true, isLastExplicitSwitch, isLastSwitchInFile);
         }
 
         public void Dump(OutputStream outStream)
@@ -2669,7 +2694,7 @@ namespace APEDisasm
                 _lastSwitchInFile = sw;
 
                 if (sw.Label < 1000000000)
-                    _lastSwitchInFile = sw;
+                    _lastExplicitSwitch = sw;
             }
 
             foreach (Window window in _apeFile.RootElementList.Windows)
@@ -2759,7 +2784,7 @@ namespace APEDisasm
 
                 outStream.WriteLine("");
                 outStream.WriteLine($"#switch {IdToLabel(sw.Label)}");
-                DumpSwitchStatements(0, sw.CommandList, outStream);
+                DumpSwitchStatements(0, sw.CommandList, outStream, sw == _lastExplicitSwitch, sw == _lastSwitchInFile);
             }
         }
     }
