@@ -2640,6 +2640,10 @@ namespace APEDisasm
                     if (cmd.CommandType == SwitchCommand.ECommandType.ExternCommand && isLastStatementInBlock && isLastExplicitSwitch)
                         suppressNewline = true;
 
+                    // grumpos crash
+                    if (cmd.CommandType == SwitchCommand.ECommandType.SetFloatCommand && isLastStatementInBlock && isLastExplicitSwitch && !isLastSwitchInFile)
+                        suppressNewline = true;
+
                     if (!suppressNewline)
                         outStream.WriteLine("");
                 }
