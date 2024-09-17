@@ -2,4 +2,10 @@
 *.user
 APEDisasm/APEDisasm/bin
 APEDisasm/APEDisasm/obj
+APEDisasm/AnoxAPE/bin
+APEDisasm/AnoxAPE/obj
+APEDisasm/dparse/bin
+APEDisasm/dparse/obj
+APEDisasm/rdc/bin
+APEDisasm/rdc/obj
 launchSettings.json
