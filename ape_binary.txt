@@ -96,8 +96,12 @@ SimpleStringCommandByte:
 	| BYTE(79)		// = nextwindow (goto if the string parameter is a simple label)
 	| BYTE(87)		// = style
 
-BodyCommand:
-	BYTE(66) OptionalExpression String FormattingValue
+ConditionalFormattedStringCommandByte:
+	BYTE(84)		// = title
+	| BYTE(66)		// = body
+
+ConditionalFormattedStringCommand:
+	ConditionalFormattedStringCommandByte OptionalExpression(Condition) String FormattingValue
 
 ChoiceCommand:
 	BYTE(67) OptionalExpression String FormattingValue UINT32(Label)
@@ -159,9 +163,6 @@ XYPrintFXCommand:
 	BYTE(80) OptionalExpression(XCoord) OptionalExpression(YCoord) OptionalExpression(Alpha)
 		OptionalExpression(Red) OptionalExpression(Green) OptionalExpression(Blue) OptionalString(Font)
 		String(Message) OptionalExpression(Condition) FormattingValue
-
-TitleCommand:
-	BYTE(84) OptionalExpression(Condition) String FormattingValue
 
 TalkCommand:
 	BYTE(89) String(Animation1) OptionalString(Animation2) String(Name1) String(Name2) UINT32(Stay1Flag) UINT32(Stay2Flag)

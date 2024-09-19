@@ -9,6 +9,11 @@
             Expression = null;
         }
 
+        public OptionalExpression(ExpressionValue? expression)
+        {
+            Expression = expression;
+        }
+
         public void Load(InputStream inStream, int indent, OutputStream? disasmStream)
         {
             if (disasmStream != null)

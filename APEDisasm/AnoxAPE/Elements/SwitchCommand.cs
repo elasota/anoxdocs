@@ -44,6 +44,14 @@ namespace AnoxAPE.Elements
             Expression = new OptionalExpression();
         }
 
+        public SwitchCommand(ECommandType cmdType, OptionalString str, FormattingValue fmt, OptionalExpression expr)
+        {
+            CommandType = cmdType;
+            Str = str;
+            FormattingValue = fmt;
+            Expression = expr;
+        }
+
         public void Load(InputStream inStream, int indent, OutputStream? disasmStream)
         {
             if (disasmStream != null)

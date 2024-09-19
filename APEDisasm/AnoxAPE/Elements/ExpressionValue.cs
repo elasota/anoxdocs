@@ -68,6 +68,18 @@
             _exprFlags = 0;
         }
 
+        public ExpressionValue(EOperator op, ulong leftPrefix, EOperandType leftOpType, IExpressionOperand left, ulong rightPrefix, EOperandType rightOpType, IExpressionOperand right)
+        {
+            _exprFlags = 0;
+            Operator = op;
+            LeftPrefix = leftPrefix;
+            Left = left;
+            RightPrefix = rightPrefix;
+            Right = right;
+            LeftOperandType = leftOpType;
+            RightOperandType = rightOpType;
+        }
+
         private static void ValidateFlags(InputStream inStream, uint exprFlags)
         {
             if ((exprFlags & 0x15) == 0x01)
@@ -170,7 +182,7 @@
             RightPrefix = inStream.ReadUInt64();
 
             if (disasmStream != null)
-                disasmStream.WriteLineIndented(indent + 1, $"LeftTreePos({RightPrefix})");
+                disasmStream.WriteLineIndented(indent + 1, $"RightTreePos({RightPrefix})");
 
             Right.Load(inStream, indent + 1, disasmStream);
         }

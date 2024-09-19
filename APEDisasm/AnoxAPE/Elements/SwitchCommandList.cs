@@ -11,6 +11,12 @@
             Commands = _commandsList;
         }
 
+        public SwitchCommandList(IEnumerable<CCPrefixedCommand> cmds)
+        {
+            _commandsList = new List<CCPrefixedCommand>(cmds);
+            Commands = _commandsList;
+        }
+
         public void Load(InputStream inStream, int indent, OutputStream? disasmStream)
         {
             while (true)

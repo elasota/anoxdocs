@@ -1,6 +1,9 @@
-﻿using System.Diagnostics;
+﻿using System.ComponentModel.Design;
+using System.Diagnostics;
+using System.Security.Cryptography;
 using AnoxAPE;
 using AnoxAPE.Elements;
+using AnoxAPECompiler;
 
 namespace APEDisasm
 {
@@ -129,7 +132,53 @@ namespace APEDisasm
             return true;
         }
 
-        static void ValidateFile(string apePath, string sourcePath, string dparsePath, IReadOnlySet<long>? labelLocations, IDictionary<string, string> failureReasons)
+        static bool ValidateCompilerMatch(string sourcePath, Stream apeFile, Stream recompiledFile, IEnumerable<long> sortedLabelLocations, IDictionary<string, string> failureReasons)
+        {
+            if (apeFile.Length != recompiledFile.Length)
+            {
+                if (recompiledFile.Length == 0)
+                    failureReasons[sourcePath] = "dparse compile failed";
+                else
+                    failureReasons[sourcePath] = "File lengths are different";
+                return false;
+            }
+
+            long lastReadStart = 0;
+            foreach (long labelLocation in sortedLabelLocations)
+            {
+                long chunkSize = labelLocation - lastReadStart;
+
+                if (chunkSize > 0)
+                {
+                    long failPos = 0;
+                    if (!CompareBytes(apeFile, recompiledFile, chunkSize, out failPos))
+                    {
+                        failureReasons[sourcePath] = $"FAILED: File contents were different (strict check at {failPos} failed)";
+                        return false;
+                    }
+                }
+
+                if (!CompareLabels(apeFile, recompiledFile))
+                {
+                    failureReasons[sourcePath] = $"FAILED: File contents were different (label compare check at {labelLocation} failed)";
+                    return false;
+                }
+
+                lastReadStart = labelLocation + 4;
+            }
+
+            long remainderSize = apeFile.Length - lastReadStart;
+            long remainderFailPos = 0;
+            if (!CompareBytes(apeFile, recompiledFile, remainderSize, out remainderFailPos))
+            {
+                failureReasons[sourcePath] = $"FAILED: File contents were different (trailing strict check at {remainderFailPos} failed)";
+                return false;
+            }
+
+            return true;
+        }
+
+        static void ValidateFileWithDParse(string apePath, string sourcePath, string dparsePath, IReadOnlySet<long>? labelLocations, IDictionary<string, string> failureReasons)
         {
             if (labelLocations == null)
                 throw new Exception("Internal error: No label location tracker");
@@ -172,7 +221,6 @@ namespace APEDisasm
                     return;
                 }
 
-
                 process.WaitForExit();
 
                 if (process.ExitCode != 0)
@@ -185,46 +233,8 @@ namespace APEDisasm
                 {
                     using (FileStream recompiledFile = new FileStream(recompiledPath, FileMode.Open, FileAccess.Read))
                     {
-                        if (apeFile.Length != recompiledFile.Length)
-                        {
-                            if (recompiledFile.Length == 0)
-                                failureReasons[sourcePath] = "dparse compile failed";
-                            else
-                                failureReasons[sourcePath] = "File lengths are different";
+                        if (!ValidateCompilerMatch(sourcePath, apeFile, recompiledFile, sortedLabelLocations, failureReasons))
                             return;
-                        }
-
-                        long lastReadStart = 0;
-                        foreach (long labelLocation in sortedLabelLocations)
-                        {
-                            long chunkSize = labelLocation - lastReadStart;
-
-                            if (chunkSize > 0)
-                            {
-                                long failPos = 0;
-                                if (!CompareBytes(apeFile, recompiledFile, chunkSize, out failPos))
-                                {
-                                    failureReasons[sourcePath] = $"FAILED: File contents were different (strict check at {failPos} failed)";
-                                    return;
-                                }
-                            }
-
-                            if (!CompareLabels(apeFile, recompiledFile))
-                            {
-                                failureReasons[sourcePath] = $"FAILED: File contents were different (label compare check at {labelLocation} failed)";
-                                return;
-                            }
-
-                            lastReadStart = labelLocation + 4;
-                        }
-
-                        long remainderSize = apeFile.Length - lastReadStart;
-                        long remainderFailPos = 0;
-                        if (!CompareBytes(apeFile, recompiledFile, remainderSize, out remainderFailPos))
-                        {
-                            failureReasons[sourcePath] = $"FAILED: File contents were different (trailing strict check at {remainderFailPos} failed)";
-                            return;
-                        }
                     }
                 }
 
@@ -245,7 +255,65 @@ namespace APEDisasm
             }
         }
 
-        static void DisassembleSingleFile(string inputPath, string outputPath, bool sourceMode, bool validateMode, string dparsePath, IDictionary<string, string> failureReasons)
+        private class RecompileLogger : AnoxAPECompiler.ILogger
+        {
+            void ILogger.WriteLine(ILogger.MessageProperties msgProps, string message)
+            {
+                if (msgProps.Severity == ILogger.Severity.Error)
+                    Console.Error.WriteLine($"Line {msgProps.LocationTag.FileLine} Col {msgProps.LocationTag.FileCol}: {message}");
+            }
+        }
+
+        static void ValidateFileWithAPECompiler(string apePath, string sourcePath, IReadOnlySet<long>? labelLocations, IDictionary<string, string> failureReasons)
+        {
+            if (labelLocations == null)
+                throw new Exception("Internal error: No label location tracker");
+
+            List<long> sortedLabelLocations = new List<long>();
+            foreach (long labelLocation in labelLocations)
+                sortedLabelLocations.Add(labelLocation);
+
+            sortedLabelLocations.Sort();
+
+            Console.WriteLine("Validating {0}", sourcePath);
+
+            List<string> args = new List<string>();
+
+            AnoxAPECompiler.CompilerOptions options = new AnoxAPECompiler.CompilerOptions();
+            options.SetAllDParseOptions();
+            options.Logger = new RecompileLogger();
+            options.InputFileName = Path.GetFileName(sourcePath);
+
+            APEFile? recompiledAPE = null;
+            using (FileStream sourceFile = new FileStream(sourcePath, FileMode.Open, FileAccess.Read))
+            {
+                AnoxAPECompiler.Compiler compiler = new AnoxAPECompiler.Compiler(options, sourceFile);
+                recompiledAPE = compiler.Compile();
+            }
+
+            if (recompiledAPE == null)
+            {
+                failureReasons[sourcePath] = "Recompile failed";
+                return;
+            }
+            else
+            {
+                MemoryStream recompiledData = new MemoryStream();
+                recompiledAPE.Write(new OutputStream(recompiledData));
+
+                recompiledData.Position = 0;
+
+                using (FileStream apeFile = new FileStream(apePath, FileMode.Open, FileAccess.Read))
+                {
+                    if (!ValidateCompilerMatch(sourcePath, apeFile, recompiledData, sortedLabelLocations, failureReasons))
+                        return;
+                }
+            }
+
+            Console.WriteLine("PASSED");
+        }
+
+        private static void DisassembleSingleFile(string inputPath, string outputPath, bool sourceMode, bool validateMode, string dparsePath, IDictionary<string, string> failureReasons)
         {
             IReadOnlySet<long>? labelLocations = null;
 
@@ -270,7 +338,10 @@ namespace APEDisasm
 
             if (validateMode && sourceMode)
             {
-                ValidateFile(inputPath, outputPath, dparsePath, labelLocations, failureReasons);
+                if (dparsePath.Length == 0)
+                    ValidateFileWithAPECompiler(inputPath, outputPath, labelLocations, failureReasons);
+                else
+                    ValidateFileWithDParse(inputPath, outputPath, dparsePath, labelLocations, failureReasons);
             }
         }
 
@@ -322,6 +393,11 @@ namespace APEDisasm
                     }
 
                     validatePath = args[endOpts];
+                }
+                else if (opt == "-validate_rdc")
+                {
+                    validateMode = true;
+                    validatePath = "";
                 }
                 else if (opt == "-dir")
                     dirMode = true;

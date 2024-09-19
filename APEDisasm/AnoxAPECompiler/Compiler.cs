@@ -1,8 +1,8 @@
-﻿using AnoxAPE.Elements;
-using AnoxAPE.HLCompiler;
-using System.Reflection.PortableExecutable;
+﻿using AnoxAPE;
+using AnoxAPE.Elements;
+using AnoxAPECompiler.HLCompiler;
 
-namespace AnoxAPE
+namespace AnoxAPECompiler
 {
     public class Compiler
     {
@@ -29,6 +29,8 @@ namespace AnoxAPE
         private ByteString _windowBStr;
         private ByteString _switchBStr;
         private ExprParser _exprParser;
+        private ExprConverter _exprConverter;
+        private uint _inlineSwitchHash;
 
         public Compiler(CompilerOptions options, Stream inStream)
         {
@@ -39,14 +41,39 @@ namespace AnoxAPE
             _loaderStream = inStream;
             _isCompiled = false;
             _inputFileBytes = new byte[0];
-            _defineBStr = ByteString.FromAsciiString("#define");
-            _windowBStr = ByteString.FromAsciiString("#window");
-            _switchBStr = ByteString.FromAsciiString("#switch");
+            _defineBStr = ByteString.FromAsciiString("define");
+            _windowBStr = ByteString.FromAsciiString("window");
+            _switchBStr = ByteString.FromAsciiString("switch");
 
-            if (options.DParseOperatorPrecedences)
-                _exprParser = new ExprParser(OperatorPrecedences.DParseCompatible, options.AllowExpFloatSyntax);
+            OperatorPrecedences precedences = (options.DParseOperatorPrecedences) ? OperatorPrecedences.DParseCompatible : OperatorPrecedences.Cpp;
+
+            _exprParser = new ExprParser(precedences, options.Logger, options.AllowExpFloatSyntax, options.AllowEscapesInExprStrings, options.AllowMalformedExprs);
+            _exprConverter = new ExprConverter(options.AllowMalformedExprs, options.Optimize, options.Logger);
+
+            if (options.UseExplicitInlineSwitchHash)
+                _inlineSwitchHash = options.ExplicitInlineSwitchHash;
             else
-                _exprParser = new ExprParser(OperatorPrecedences.Cpp, options.AllowExpFloatSyntax);
+                _inlineSwitchHash = ComputeInlineSwitchHash(options.InputFileName);
+        }
+
+        private static uint ComputeInlineSwitchHash(string inputFileName)
+        {
+            string noExtFileName = Path.GetFileNameWithoutExtension(inputFileName);
+
+            int hash = 0;
+            foreach (char c in noExtFileName)
+            {
+                if (c < 0 || c >= 128)
+                    throw new ArgumentException("File name for computing inline switch hash contained non-ASCII characters");
+
+                int ci = (int)c;
+                if (ci >= 'A' && ci <= 'Z')
+                    ci += ('a' - 'A');
+
+                hash = (hash & 0x7ffffff) * 31 + ci;
+            }
+
+            return (uint)(hash % 100000);
         }
 
         private APEFile InternalCompile()
@@ -63,7 +90,8 @@ namespace AnoxAPE
             if (_options.DParseMacroHandling)
                 DParseCompatibleApplyMacros();
 
-            TokenReader tokenReader = new TokenReader(_inputFileBytes, _options);
+            PositionTrackingReader ptr = new PositionTrackingReader(_inputFileBytes, _options.InputFileName);
+            TokenReader2 tokenReader = new TokenReader2(ptr, _options.AllowExpFloatSyntax);
 
             CompileInput(tokenReader);
 
@@ -338,56 +366,73 @@ namespace AnoxAPE
                 throw new CompilerException(blockCommentStartLocTag, "Unterminated block comment");
         }
 
-        private void CompileWindowDirective(PositionTrackingReader reader, TokenReader tokenReader)
+        private void CompileWindowDirective(TokenReader2 tokenReader, out bool isImmediatelyAfterTLD)
         {
-            reader.StepAhead(_windowBStr.Length);
+            WindowCompiler windowCompiler = new WindowCompiler(tokenReader, _exprParser, _inlineSwitches, _exprConverter, _inlineSwitchHash, _options);
 
-            WindowCompiler windowCompiler = new WindowCompiler(reader, tokenReader, _exprParser, _inlineSwitches);
-
-            Window window = windowCompiler.Compile();
+            Window window = windowCompiler.Compile(out isImmediatelyAfterTLD);
             _windows.Add(window);
         }
 
-        private void CompileSwitchDirective(PositionTrackingReader reader)
+        private void CompileSwitchDirective(TokenReader2 tokenReader, out bool isImmediatelyAfterTLD)
         {
+            uint label = _exprParser.ParseLabel(tokenReader);
 
-            throw new NotImplementedException();
+            SwitchCompiler swCompiler = new SwitchCompiler(tokenReader, _exprParser, _exprConverter, _options);
+
+            _explicitSwitches.Add(swCompiler.Compile(label, false, out isImmediatelyAfterTLD));
         }
 
-        private void CompileDirective(PositionTrackingReader reader, TokenReader tokenReader)
+        // This function must be called AFTER the top-level directive
+        private void CompileDirective(TokenReader2 reader, Token tok, out bool isImmediatelyAfterTLD)
         {
-            if (reader.Matches(_windowBStr))
-                CompileWindowDirective(reader, tokenReader);
-            else if (reader.Matches(_switchBStr))
-                CompileSwitchDirective(reader);
+            if (tok.Value.Equals(_windowBStr))
+                CompileWindowDirective(reader, out isImmediatelyAfterTLD);
+            else if (tok.Value.Equals(_switchBStr))
+                CompileSwitchDirective(reader, out isImmediatelyAfterTLD);
             else
-                throw new CompilerException(reader.LocationTag, "Unknown compile directive");
+                throw new CompilerException(tok.Location, "Unknown compile directive");
         }
 
-        private void CompileInput(TokenReader tokenReader)
+        private void CompileInput(TokenReader2 reader)
         {
-            PositionTrackingReader reader = new PositionTrackingReader(_inputFileBytes, _options.InputFileName);
+            if (_options.DParseTopLevelDirectiveHandling)
+            {
+                // Ignore garbage before first TLD
+                while (true)
+                {
+                    Token tok = reader.PeekToken(TokenReadMode.Normal, (new TokenReadProperties()).Add(TokenReadProperties.Flag.TerminateQuotesOnNewLine));
 
+                    if (tok.TokenType == TokenType.TopLevelDirective || tok.TokenType == TokenType.EndOfFile)
+                        break;
+
+                    reader.ConsumeToken();
+                }
+            }
+
+            bool isImmediatelyAfterTLD = false;
             while (true)
             {
-                tokenReader.SkipWhitespace(reader, EOLBehavior.Ignore);
-
-                if (reader.IsAtEndOfFile)
-                    return;
-
-                byte b = reader.PeekOne();
-                if (b != '#')
+                if (!isImmediatelyAfterTLD)
                 {
-                    if (_options.DParseMacroHandling)
-                    {
-                        reader.StepAhead(1);
+                    Token tok = reader.ReadToken(TokenReadMode.Normal);
+
+                    if (tok.TokenType == TokenType.EndOfLine)
                         continue;
-                    }
-                    else
-                        throw new CompilerException(reader.LocationTag, "Unexpected token where a directive was expected");
+
+                    if (tok.TokenType == TokenType.EndOfFile)
+                        break;
+
+                    if (tok.TokenType != TokenType.TopLevelDirective)
+                        throw new CompilerException(tok.Location, "Expected a top-level directive");
                 }
 
-                CompileDirective(reader, tokenReader);
+                Token tldTypeTok = reader.ReadToken(TokenReadMode.Normal);
+
+                if (tldTypeTok.TokenType != TokenType.Identifier)
+                    throw new CompilerException(tldTypeTok.Location, "Expected identifier for # directive");
+
+                CompileDirective(reader, tldTypeTok, out isImmediatelyAfterTLD);
             }
         }
 

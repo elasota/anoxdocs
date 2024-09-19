@@ -11,6 +11,12 @@
             CommandList = new SwitchCommandList();
         }
 
+        public Switch(uint label, SwitchCommandList commandList)
+        {
+            Label = label;
+            CommandList = commandList;
+        }
+
         public void Load(InputStream inStream, int indent, OutputStream? disasmStream)
         {
             if (disasmStream != null)

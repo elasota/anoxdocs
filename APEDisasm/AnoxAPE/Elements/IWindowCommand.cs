@@ -2,7 +2,7 @@
 {
     public enum WindowCommandType
     {
-        Title,
+        ConditionalFormattedStringCommand,
         Talk,
         Dimensions,
         Image,
@@ -12,7 +12,6 @@
         SimpleStringCommand,
         XYPrintFX,
         Switch,
-        Body,
         Background,
         Cam,
     }

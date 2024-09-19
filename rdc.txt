@@ -1,0 +1,106 @@
+rdc is a new APE compiler
+
+Some explanations of options:
+
+-f <name>: Overrides the file name instead of detecting it from input.
+
+dparse uses the filename to generate a hash which is used to auto-generate
+switch labels for inline switches.  You can use this to set it to something
+else.
+
+-is <value>: Override inline switch value with a specific number instead of
+             computing it from the file name.
+
+
+-d: Enable all dparse compatibility options
+
+
+-dm: dparse macro behavior
+
+dparse macros use a simple substitution that applies anywhere.  For example:
+
+#define HELLO "whatever"
+
+choice "something HELLO something"
+
+... will result in:
+
+choice "something whatever something"
+
+Additionally, dparse allows defines to appear anywhere, it replaces the
+define text with spaces and a bug where the trailing quote is not skipped,
+so this:
+choice "hello #define MACRO "something"
+
+... results in:
+choice "hello                         "
+
+Consequently, enabling -dm enables -dt too.
+
+
+
+If you don't enable this option, rdc will expect macro values to be unquoted
+and will only replace them when they appear as tokens.
+
+
+-dc: dparse comment removal behavior
+
+dparse removes comments from anywhere, including inside of strings, e.g.:
+
+choice "hello /* comment */ hello"
+
+... gets replaced with:
+
+choice "hello               hello"
+
+If you don't enable this option, rdc will only replace comments outside
+of strings.
+
+
+-dt: dparse top-level directive handling
+
+This causes tokens before the first #window or #switch directive to be
+ignored.
+
+
+-dg: dparse goto handling
+
+dparse doesn't strip trailing whitespace from goto statement labels and
+processes the labels as strings.  This turns on -dc too.
+
+If this isn't enabled, rdc will remove trailing whitespace.
+
+
+-dp: dparse operator precedence
+
+In dparse, all operators have unique precedences.  In order, they are:
+/  *  -  +  <=  >=  <  >  !=  ==  &&  ^^  ||
+
+If you don't enable this, rdc will use C++ operator precedences, with
+xor between and and or.
+/  *
+-  +
+<=  >=  <  >
+!=  ==
+&&
+^^
+||
+
+-de: Permit invalidly-typed expressions
+
+-nexp: Disallow exponents in float constants
+
+-ds: Disallow escape characters in expression strings
+
+-opt: Optimize constant expressions
+
+
+rdc permits several things that dparse doesn't:
+- "else" commands in windows are allowed (as long as the expression is valid)
+- Empty "if"/"else" statement blocks are allowed
+
+rdc disallows some things that dparse allows:
+- Only identifiers are allowed as formatting arguments.  If a formatting
+  argument contains whitespace after the first identifier, and is not followed
+  by a comma, then rdc will throw an error.
+

@@ -5,11 +5,15 @@ VisualStudioVersion = 17.11.35222.181
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "APEDisasm", "APEDisasm\APEDisasm.csproj", "{7976D301-4A94-4088-8B06-F8C903975AA4}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AnoxAPE", "AnoxAPE\AnoxAPE.csproj", "{2CECAAD4-FACF-4EBA-8CD4-5469AEAF3472}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "AnoxAPE", "AnoxAPE\AnoxAPE.csproj", "{2CECAAD4-FACF-4EBA-8CD4-5469AEAF3472}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "rdc", "rdc\rdc.csproj", "{4D49B281-27C2-4698-A020-7935FADCC508}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "rdc", "rdc\rdc.csproj", "{4D49B281-27C2-4698-A020-7935FADCC508}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "dparse", "dparse\dparse.csproj", "{76F1B164-F3A9-49B9-8F0E-790319E5751E}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "dparse", "dparse\dparse.csproj", "{76F1B164-F3A9-49B9-8F0E-790319E5751E}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AnoxAPECompiler", "AnoxAPECompiler\AnoxAPECompiler.csproj", "{89B5B195-BFEE-4B21-AF79-047326E3349F}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AnoxAPEDecompiler", "AnoxAPEDecompiler\AnoxAPEDecompiler.csproj", "{39B72C17-AFF7-4510-9157-7712C88E185A}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -33,6 +37,14 @@ Global
 		{76F1B164-F3A9-49B9-8F0E-790319E5751E}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{76F1B164-F3A9-49B9-8F0E-790319E5751E}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{76F1B164-F3A9-49B9-8F0E-790319E5751E}.Release|Any CPU.Build.0 = Release|Any CPU
+		{89B5B195-BFEE-4B21-AF79-047326E3349F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{89B5B195-BFEE-4B21-AF79-047326E3349F}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{89B5B195-BFEE-4B21-AF79-047326E3349F}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{89B5B195-BFEE-4B21-AF79-047326E3349F}.Release|Any CPU.Build.0 = Release|Any CPU
+		{39B72C17-AFF7-4510-9157-7712C88E185A}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{39B72C17-AFF7-4510-9157-7712C88E185A}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{39B72C17-AFF7-4510-9157-7712C88E185A}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{39B72C17-AFF7-4510-9157-7712C88E185A}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

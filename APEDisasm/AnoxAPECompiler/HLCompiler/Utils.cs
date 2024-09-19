@@ -1,63 +1,13 @@
-﻿using AnoxAPE.Elements;
+﻿using AnoxAPE;
+using AnoxAPE.Elements;
 
-namespace AnoxAPE.HLCompiler
+namespace AnoxAPECompiler.HLCompiler
 {
     internal class Utils
     {
         public static bool IsWhitespace(byte b)
         {
             return b <= ' ';
-        }
-
-        public static uint ParseLabel(ByteStringSlice token, ILogger.LocationTag blameLoc)
-        {
-            uint labelHigh = 0;
-            uint labelLow = 0;
-
-            int readPos = 0;
-            while (readPos < token.Length)
-            {
-                byte b = token[readPos];
-
-                if (b == ':')
-                    break;
-
-                if (b < '0' || b > '9')
-                    throw new CompilerException(blameLoc, "Invalid label");
-
-                labelHigh = labelHigh * 10 + (uint)(b - '0');
-                if (labelHigh >= 100000)
-                    throw new CompilerException(blameLoc, "Invalid label");
-
-                readPos++;
-            }
-
-            if (readPos == token.Length)
-                throw new CompilerException(blameLoc, "Invalid label");
-
-            readPos++;
-
-            while (readPos < token.Length)
-            {
-                byte b = token[readPos];
-
-                if (b == ':')
-                    break;
-
-                if (b < '0' || b > '9')
-                    throw new CompilerException(blameLoc, "Invalid label");
-
-                labelLow = labelLow * 10 + (uint)(b - '0');
-                if (labelHigh >= 10000)
-                    throw new CompilerException(blameLoc, "Invalid label");
-
-                readPos++;
-            }
-
-            if (labelHigh == 0 || labelLow == 0)
-                throw new CompilerException(blameLoc, "Invalid label");
-
-            return labelHigh * 10000 + labelLow;
         }
 
         internal static ExprResultType ResolveResultType(IExprValue left, IExprValue right, ExpressionValue.EOperator op)
@@ -185,8 +135,51 @@ namespace AnoxAPE.HLCompiler
                 return true;
             }
 
+            if (escapeChar == '\\')
+            {
+                result = (byte)'\\';
+                return true;
+            }
+
             result = 0;
             return false;
+        }
+
+        internal static ByteStringSlice EscapeSlice(ByteStringSlice slice, ILogger.LocationTag locTag, bool applyNormalEscapes, bool convertEndOfLineToSpace)
+        {
+            bool needsNormalEscape = false;
+            bool needsEOLEscape = false;
+            for (int i = 0; i < slice.Length; i++)
+            {
+                byte b = slice[i];
+                if (b == '\\' && applyNormalEscapes)
+                    needsNormalEscape = true;
+                if (b == '\n' && convertEndOfLineToSpace)
+                    needsEOLEscape = true;
+            }
+
+            if (!needsNormalEscape && !needsEOLEscape)
+                return slice;
+
+            List<byte> bytes = new List<byte>();
+
+            for (int i = 0; i < slice.Length; i++)
+            {
+                byte b = slice[i];
+                if (needsNormalEscape && b == '\\')
+                {
+                    i++;
+                    b = slice[i];
+                    if (!Utils.TryResolveEscapeChar(b, out b))
+                        throw new CompilerException(locTag, "Unknown escape character");
+                }
+                else if (needsEOLEscape && b == '\n')
+                    b = (byte)' ';
+
+                bytes.Add(b);
+            }
+
+            return new ByteString(bytes.ToArray()).ToSlice();
         }
     }
 }

@@ -1,4 +1,4 @@
-﻿namespace AnoxAPE
+﻿namespace AnoxAPECompiler
 {
     public class CompilerException : Exception
     {

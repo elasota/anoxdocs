@@ -22,6 +22,16 @@ namespace AnoxAPE.Elements
             Name2 = new ByteString();
         }
 
+        public TalkCommand(ByteString animation1, OptionalString animation2, ByteString name1, ByteString name2, bool stay1Flag, bool stay2Flag)
+        {
+            Animation1 = animation1;
+            Animation2 = animation2;
+            Name1 = name1;
+            Name2 = name2;
+            Stay1Flag = stay1Flag ? 1u : 0u;
+            Stay2Flag = stay2Flag ? 1u : 0u;
+        }
+
         public void Load(InputStream inStream, int indent, OutputStream? disasmStream)
         {
             if (disasmStream != null)

@@ -9,6 +9,11 @@
             Expression = new ExpressionValue();
         }
 
+        public ExpressionValueOperand(ExpressionValue expression)
+        {
+            Expression = expression;
+        }
+
         public void Load(InputStream inStream, int indent, OutputStream? disasmStream)
         {
             Expression.Load(inStream, indent, disasmStream);

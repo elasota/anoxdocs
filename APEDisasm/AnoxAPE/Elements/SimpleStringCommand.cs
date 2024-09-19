@@ -22,6 +22,12 @@
             CommandStr = new ByteString();
         }
 
+        public SimpleStringCommand(ECommandType commandType, ByteString commandStr)
+        {
+            CommandType = commandType;
+            CommandStr = commandStr;
+        }
+
         public void Load(InputStream inStream, int indent, OutputStream? disasmStream)
         {
             if (disasmStream != null)

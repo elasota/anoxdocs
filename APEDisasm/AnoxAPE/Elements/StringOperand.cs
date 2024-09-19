@@ -9,6 +9,11 @@
             Value = new ByteString();
         }
 
+        public StringOperand(ByteString value)
+        {
+            Value = value;
+        }
+
         public void Load(InputStream inStream, int indent, OutputStream? disasmStream)
         {
             if (disasmStream != null)

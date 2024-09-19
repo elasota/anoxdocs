@@ -1,4 +1,6 @@
-﻿namespace AnoxAPE.HLCompiler
+﻿using AnoxAPE.Elements;
+
+namespace AnoxAPECompiler.HLCompiler
 {
     internal enum ExprType
     {
@@ -21,5 +23,6 @@
     {
         ExprType ExprType { get; }
         ExprResultType ResultType { get; }
+        ExpressionValue.EOperandType OperandType { get; }
     }
 }

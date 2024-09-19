@@ -1,5 +1,6 @@
 ﻿using AnoxAPE;
 using AnoxAPE.Elements;
+using AnoxAPECompiler;
 
 namespace rdc
 {
@@ -56,7 +57,7 @@ namespace rdc
 
             CompilerOptions options = new CompilerOptions();
             options.Logger = new CompilerLogger();
-            options.InputFileName = inputPath;
+            options.InputFileName = Path.GetFileName(inputPath);
             options.SetAllDParseOptions();
 
             using (FileStream inStream = new FileStream(inputPath, FileMode.Open, FileAccess.Read))
@@ -70,7 +71,7 @@ namespace rdc
                     return;
                 }
 
-                using (FileStream outStream = new FileStream(inputPath, FileMode.Create, FileAccess.Write))
+                using (FileStream outStream = new FileStream(outputPath, FileMode.Create, FileAccess.Write))
                 {
                     apeFile.Write(new OutputStream(outStream));
                 }

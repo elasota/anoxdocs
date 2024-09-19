@@ -40,7 +40,8 @@
                         cmd = new SimpleStringCommand(commandByte);
                         break;
                     case 66:
-                        cmd = new BodyCommand();
+                    case 84:
+                        cmd = new ConditionalFormattedStringCommand(commandByte);
                         break;
                     case 67:
                         cmd = new ChoiceCommand();
@@ -69,9 +70,6 @@
                         break;
                     case 80:
                         cmd = new XYPrintFXCommand();
-                        break;
-                    case 84:
-                        cmd = new TitleCommand();
                         break;
                     case 89:
                         cmd = new TalkCommand();

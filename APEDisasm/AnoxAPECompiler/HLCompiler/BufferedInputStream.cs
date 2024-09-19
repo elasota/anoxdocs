@@ -1,4 +1,4 @@
-﻿namespace AnoxAPE.HLCompiler
+﻿namespace AnoxAPECompiler.HLCompiler
 {
     internal class BufferedInputStream
     {

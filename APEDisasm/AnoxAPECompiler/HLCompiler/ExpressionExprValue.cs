@@ -1,7 +1,7 @@
 ﻿
 using AnoxAPE.Elements;
 
-namespace AnoxAPE.HLCompiler
+namespace AnoxAPECompiler.HLCompiler
 {
     internal class ExpressionExprValue : IExprValue
     {
@@ -14,6 +14,8 @@ namespace AnoxAPE.HLCompiler
         public ExprType ExprType { get { return ExprType.Expr; } }
 
         public ExprResultType ResultType { get { return _resultType; } }
+
+        public ExpressionValue.EOperandType OperandType { get { return ExpressionValue.EOperandType.Expression; } }
 
         private ExprResultType _resultType;
 

@@ -139,11 +139,26 @@ namespace AnoxAPE
 
         public ByteString ToByteString()
         {
+            if (_offset == 0 && _length == _bytes.Length)
+                return new ByteString(_bytes);
+
             byte[] bytes = new byte[_length];
             for (int i = 0; i < _length; i++)
                 bytes[i] = _bytes[_offset + i];
 
             return new ByteString(bytes);
+        }
+
+        public ByteStringSlice SubSlice(int start, int length)
+        {
+            if (start < 0 || start > _length)
+                throw new ArgumentOutOfRangeException(nameof(start));
+
+            int maxLength = _length - start;
+            if (length > maxLength)
+                throw new ArgumentOutOfRangeException(nameof(length));
+
+            return new ByteStringSlice(_bytes, _offset + start, length);
         }
 
         public IEnumerator<byte> GetEnumerator()

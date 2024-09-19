@@ -20,6 +20,11 @@
             CommandType = (ECommandType)commandByte;
         }
 
+        public WindowSwitchCommand(uint label)
+        {
+            Label = label;
+        }
+
         public void Load(InputStream inStream, int indent, OutputStream? disasmStream)
         {
             inStream.MarkSwitchLabel();

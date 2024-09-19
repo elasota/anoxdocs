@@ -12,11 +12,20 @@ namespace AnoxAPE.Elements
 
 
         public WindowCommandType WindowCommandType { get { return WindowCommandType.Choice; } }
+
         public ChoiceCommand()
         {
             Condition = new OptionalExpression();
             Str = new ByteString();
             FormattingValue = new FormattingValue();
+        }
+
+        public ChoiceCommand(OptionalExpression condition, ByteString str, FormattingValue formattingValue, uint label)
+        {
+            Condition = condition;
+            Str = str;
+            FormattingValue = formattingValue;
+            Label = label;
         }
 
         public void Load(InputStream inStream, int indent, OutputStream? disasmStream)

@@ -12,6 +12,12 @@
             Values = _values;
         }
 
+        public FormattingValue(IEnumerable<TypedFormattingValue> values)
+        {
+            _values = new List<TypedFormattingValue>(values);
+            Values = _values;
+        }
+
         public void Load(InputStream inStream, int indent, OutputStream? disasmStream)
         {
             byte doneByte = inStream.ReadByte();

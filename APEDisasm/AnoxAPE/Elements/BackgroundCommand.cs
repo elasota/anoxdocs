@@ -29,6 +29,18 @@ namespace AnoxAPE.Elements
                 disasmStream.WriteLineIndented(indent + 1, $"Color1({ColorToHex(Color1)}) Color2({ColorToHex(Color2)}) Color3({ColorToHex(Color3)})  Color4({ColorToHex(Color4)})");
         }
 
+        public BackgroundCommand()
+        {
+        }
+
+        public BackgroundCommand(uint color1, uint color2, uint color3, uint color4)
+        {
+            Color1 = color1;
+            Color2 = color2;
+            Color3 = color3;
+            Color4 = color4;
+        }
+
         public static string ColorToHex(uint colorValue)
         {
             string nibbles = "0123456789abcdef";

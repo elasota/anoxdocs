@@ -1,4 +1,7 @@
-﻿namespace AnoxAPE.HLCompiler
+﻿using AnoxAPE;
+using AnoxAPE.Elements;
+
+namespace AnoxAPECompiler.HLCompiler
 {
     internal class StringVarExprValue : IExprValue
     {
@@ -7,6 +10,8 @@
         public ExprResultType ResultType { get { return ExprResultType.String; } }
 
         public ByteStringSlice VarName { get; private set; }
+
+        public ExpressionValue.EOperandType OperandType { get { return ExpressionValue.EOperandType.StringVar; } }
 
         public StringVarExprValue(ByteStringSlice varName)
         {

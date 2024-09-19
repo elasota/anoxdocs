@@ -171,10 +171,22 @@ namespace AnoxAPE
             }
         }
 
-        private void DumpTitleCommand(TitleCommand command, OutputStream outStream)
+        private void DumpConditionalFormattedStringCommand(ConditionalFormattedStringCommand command, OutputStream outStream)
         {
             DumpConditionPrefix(command.Condition, outStream);
-            outStream.WriteString("title ");
+
+            switch (command.CommandType)
+            {
+                case ConditionalFormattedStringCommand.ECommandType.TitleCommand:
+                    outStream.WriteString("title ");
+                    break;
+                case ConditionalFormattedStringCommand.ECommandType.BodyCommand:
+                    outStream.WriteString("body ");
+                    break;
+                default:
+                    throw new Exception("Internal error: Unknown formatted string command type");
+            }
+
             DumpQuotedString(command.Text, outStream);
             DumpFormattingValue(command.FormattingValue, outStream);
             outStream.WriteLine("");
@@ -439,13 +451,14 @@ namespace AnoxAPE
 
             outStream.WriteString("choice ");
             DumpQuotedString(command.Str, outStream);
-            outStream.WriteString(" ");
 
             if (command.FormattingValue.Values.Count > 0)
             {
                 DumpFormattingValue(command.FormattingValue, outStream);
                 outStream.WriteString(", ");
             }
+            else
+                outStream.WriteString(" ");
 
             outStream.WriteString(IdToLabel(command.Label));
             outStream.WriteLine("");
@@ -709,15 +722,6 @@ namespace AnoxAPE
             if (command.Color4 != 0)
                 outStream.WriteString(" color4=" + BackgroundCommand.ColorToHex(command.Color4));
 
-            outStream.WriteLine("");
-        }
-
-        private void DumpBodyCommand(BodyCommand command, OutputStream outStream)
-        {
-            DumpConditionPrefix(command.Condition, outStream);
-            outStream.WriteString("body ");
-            DumpQuotedString(command.BodyStr, outStream);
-            DumpFormattingValue(command.FormattingValue, outStream);
             outStream.WriteLine("");
         }
 
@@ -1179,8 +1183,8 @@ namespace AnoxAPE
                 {
                     switch (cmd.WindowCommandType)
                     {
-                        case WindowCommandType.Title:
-                            DumpTitleCommand((TitleCommand)cmd, outStream);
+                        case WindowCommandType.ConditionalFormattedStringCommand:
+                            DumpConditionalFormattedStringCommand((ConditionalFormattedStringCommand)cmd, outStream);
                             break;
                         case WindowCommandType.Talk:
                             DumpTalkCommand((TalkCommand)cmd, outStream);
@@ -1208,9 +1212,6 @@ namespace AnoxAPE
                             break;
                         case WindowCommandType.Switch:
                             windowSwitchCommands.Add((WindowSwitchCommand)cmd);
-                            break;
-                        case WindowCommandType.Body:
-                            DumpBodyCommand((BodyCommand)cmd, outStream);
                             break;
                         case WindowCommandType.Background:
                             DumpBackgroundCommand((BackgroundCommand)cmd, outStream);

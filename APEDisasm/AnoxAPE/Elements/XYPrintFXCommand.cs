@@ -5,7 +5,6 @@ namespace AnoxAPE.Elements
 {
     public class XYPrintFXCommand : IWindowCommand
     {
-        // Can be emitted as <number>
         public OptionalExpression XCoord { get; private set; }
         public OptionalExpression YCoord { get; private set; }
         public OptionalExpression Alpha { get; private set; }
@@ -34,6 +33,19 @@ namespace AnoxAPE.Elements
             FormattingValue = new FormattingValue();
         }
 
+        public XYPrintFXCommand(OptionalExpression xCoord, OptionalExpression yCoord, OptionalExpression alpha, OptionalExpression red, OptionalExpression green, OptionalExpression blue, OptionalString font, ByteString message, OptionalExpression condition, FormattingValue formattingValue)
+        {
+            XCoord = xCoord;
+            YCoord = yCoord;
+            Alpha = alpha;
+            Red = red;
+            Green = green;
+            Blue = blue;
+            Font = font;
+            Message = message;
+            Condition = condition;
+            FormattingValue = formattingValue;
+        }
 
         public void Load(InputStream inStream, int indent, OutputStream? disasmStream)
         {

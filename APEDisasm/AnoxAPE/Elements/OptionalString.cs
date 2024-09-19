@@ -8,6 +8,11 @@
         {
         }
 
+        public OptionalString(ByteString? value)
+        {
+            Value = value;
+        }
+
         public void Load(InputStream inStream, int indent, OutputStream? disasmStream)
         {
             uint length = inStream.ReadUInt32();

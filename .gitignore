@@ -2,6 +2,10 @@
 *.user
 APEDisasm/APEDisasm/bin
 APEDisasm/APEDisasm/obj
+APEDisasm/AnoxAPECompiler/bin
+APEDisasm/AnoxAPECompiler/obj
+APEDisasm/AnoxAPEDecompiler/bin
+APEDisasm/AnoxAPEDecompiler/obj
 APEDisasm/AnoxAPE/bin
 APEDisasm/AnoxAPE/obj
 APEDisasm/dparse/bin

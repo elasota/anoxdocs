@@ -22,6 +22,8 @@ namespace AnoxAPE.Elements
         public ushort Restore { get; private set; }
         public ushort Zip { get; private set; }
 
+        public static ushort UnsetValue { get { return 0x8001; } }
+
         public WindowCommandType WindowCommandType { get { return WindowCommandType.Cam; } }
 
         public CamCommand()
@@ -30,8 +32,28 @@ namespace AnoxAPE.Elements
             From = new OptionalString();
             To = new OptionalString();
             Owner = new OptionalString();
-
         }
+
+        public CamCommand(ByteString name, OptionalString from, OptionalString to, OptionalString owner, ushort yaw, ushort pitch, ushort fov, ushort far, ushort near, ushort fwd, ushort speed, ushort lift, ushort lag, ushort occlude, ushort restore, ushort zip)
+        {
+            Name = name;
+            From = from;
+            To = to;
+            Owner = owner;
+            Yaw = yaw;
+            Pitch = pitch;
+            Fov = fov;
+            Far = far;
+            Near = near;
+            Fwd = fwd;
+            Speed = speed;
+            Lift = lift;
+            Lag = lag;
+            Occlude = occlude;
+            Restore = restore;
+            Zip = zip;
+        }
+
 
         public void Load(InputStream inStream, int indent, OutputStream? disasmStream)
         {

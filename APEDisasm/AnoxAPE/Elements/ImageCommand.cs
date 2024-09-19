@@ -36,6 +36,25 @@ namespace AnoxAPE.Elements
             YPos = new OptionalExpression();
             Width = new OptionalExpression();
             Height = new OptionalExpression();
+            Flags = 0;
+        }
+
+        public ImageCommand(OptionalExpression condition, ByteString fileName, OptionalExpression xpos, OptionalExpression ypos, OptionalExpression width, OptionalExpression height, IEnumerable<EImageFlagBit> flags)
+        {
+            Condition = condition;
+            FileName = fileName;
+            XPos = xpos;
+            YPos = ypos;
+            Width = width;
+            Height = height;
+
+            Flags = 0;
+
+            foreach (EImageFlagBit flagBit in flags)
+            {
+                uint mask = (uint)1 << (int)flagBit;
+                Flags |= mask;
+            }
         }
 
         public void Load(InputStream inStream, int indent, OutputStream? disasmStream)

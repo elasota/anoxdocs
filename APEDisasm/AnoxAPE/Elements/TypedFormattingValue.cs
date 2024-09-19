@@ -18,6 +18,12 @@
             Value = new InvalidOperand();
         }
 
+        public TypedFormattingValue(EFormattingValueType type, IExpressionOperand value)
+        {
+            Type = type;
+            Value = value;
+        }
+
         public void Load(InputStream inStream, int indent, OutputStream? disasmStream)
         {
             byte typeByte = inStream.ReadByte();

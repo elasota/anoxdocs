@@ -8,6 +8,12 @@ namespace AnoxAPE.Elements
 
         public FloatOperand()
         {
+            Value = 0.0f;
+        }
+
+        public FloatOperand(float value)
+        {
+            Value = value;
         }
 
         public void Load(InputStream inStream, int indent, OutputStream? disasmStream)

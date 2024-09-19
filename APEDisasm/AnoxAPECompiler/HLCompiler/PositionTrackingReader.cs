@@ -1,6 +1,8 @@
 ﻿
 
-namespace AnoxAPE.HLCompiler
+using AnoxAPE;
+
+namespace AnoxAPECompiler.HLCompiler
 {
     internal class PositionTrackingReader
     {
