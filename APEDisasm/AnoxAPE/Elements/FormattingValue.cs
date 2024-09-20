@@ -52,6 +52,7 @@
             }
 
             outStream.WriteByte(255);
+            outStream.WriteByte(255);
         }
     }
 }

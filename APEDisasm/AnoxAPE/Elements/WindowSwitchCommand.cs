@@ -20,8 +20,9 @@
             CommandType = (ECommandType)commandByte;
         }
 
-        public WindowSwitchCommand(uint label)
+        public WindowSwitchCommand(ECommandType commandType, uint label)
         {
+            CommandType = commandType;
             Label = label;
         }
 

@@ -51,7 +51,7 @@ namespace AnoxAPECompiler.HLCompiler
             ulong rightLocation = (treeLocation << 2) + 2;
 
             IExpressionOperand left = ConvertValueToOperand(leftLocation, expr.Left, locTag);
-            IExpressionOperand right = ConvertValueToOperand(leftLocation, expr.Right, locTag);
+            IExpressionOperand right = ConvertValueToOperand(rightLocation, expr.Right, locTag);
 
             return new ExpressionValue(expr.Operator, leftLocation, expr.Left.OperandType, left, rightLocation, expr.Right.OperandType, right);
         }

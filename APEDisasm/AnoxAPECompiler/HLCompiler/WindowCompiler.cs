@@ -1,5 +1,6 @@
 ﻿using AnoxAPE;
 using AnoxAPE.Elements;
+using System.Reflection.Emit;
 
 namespace AnoxAPECompiler.HLCompiler
 {
@@ -130,9 +131,8 @@ namespace AnoxAPECompiler.HLCompiler
         private static ByteString _defaultStretchStr = ByteString.FromAsciiString("default_stretch");
         private static ByteString _defaultTileStr = ByteString.FromAsciiString("default_tile");
 
-        private uint _nextInlineSwitchID = 0;
-        private uint _inlineSwitchHash = 0;
         private CompilerOptions _options;
+        public IInlineSwitchIDGenerator _idGenerator;
 
         private static WindowFlagsResolution[] _windowFlagResolutions =
         {
@@ -160,7 +160,7 @@ namespace AnoxAPECompiler.HLCompiler
             public ILogger.LocationTag StartLocTag { get; set; }
         }
 
-        public WindowCompiler(TokenReader2 reader, ExprParser exprParser, IList<Switch> inlineSwitches, ExprConverter exprConverter, uint inlineSwitchHash, CompilerOptions options)
+        public WindowCompiler(TokenReader2 reader, ExprParser exprParser, IList<Switch> inlineSwitches, ExprConverter exprConverter, IInlineSwitchIDGenerator idGenerator, CompilerOptions options)
         {
             _reader = reader;
             _inlineSwitches = inlineSwitches;
@@ -184,8 +184,7 @@ namespace AnoxAPECompiler.HLCompiler
             _height = new OptionalExpression();
             _exprConverter = exprConverter;
 
-            _inlineSwitchHash = inlineSwitchHash;
-            _nextInlineSwitchID = 0;
+            _idGenerator = idGenerator;
         }
 
         private void CompileWindowDirective(Token tok)
@@ -324,11 +323,11 @@ namespace AnoxAPECompiler.HLCompiler
             else if (directiveToken.Equals(_xyPrintFXStr))
                 CompileXYPrintFXDirective();
             else if (directiveToken.Equals(_startSwitchStr))
-                CompileSwitchDirective(ref _startSwitchCommand);
+                CompileSwitchDirective(WindowSwitchCommand.ECommandType.StartSwitchCommand, ref _startSwitchCommand);
             else if (directiveToken.Equals(_finishSwitchStr))
-                CompileSwitchDirective(ref _finishSwitchCommand);
+                CompileSwitchDirective(WindowSwitchCommand.ECommandType.FinishSwitchCommand,ref _finishSwitchCommand);
             else if (directiveToken.Equals(_thinkSwitchStr))
-                CompileSwitchDirective(ref _thinkSwitchCommand);
+                CompileSwitchDirective(WindowSwitchCommand.ECommandType.ThinkSwitchCommand, ref _thinkSwitchCommand);
             else if (directiveToken.Equals(_bodyStr))
                 CompileCompiledFormattedStringDirective(ConditionalFormattedStringCommand.ECommandType.BodyCommand, _bodyCommands);
             else if (directiveToken.Equals(_backgroundStr))
@@ -565,7 +564,6 @@ namespace AnoxAPECompiler.HLCompiler
                 nameTok = _reader.ReadToken(TokenReadMode.UnquotedString);
                 if (_options.Logger != null)
                 {
-                    bool hasParen = false;
                     foreach (byte b in nameTok.Value)
                     {
                         if (b == '(')
@@ -654,7 +652,7 @@ namespace AnoxAPECompiler.HLCompiler
                 throw new CompilerException(_reader.Location, "Unconditional command inside of a condition");
         }
 
-        private void CompileSwitchDirective(ref WindowSwitchCommand? swCommand)
+        private void CompileSwitchDirective(WindowSwitchCommand.ECommandType cmdType, ref WindowSwitchCommand? swCommand)
         {
             CheckNoCondition();
 
@@ -669,12 +667,9 @@ namespace AnoxAPECompiler.HLCompiler
 
                 _reader.ExpectToken(TokenReadMode.Normal, TokenType.OpenBrace);
 
-                uint switchID = _nextInlineSwitchID++;
-                if (switchID == 10000)
+                uint switchID;
+                if (!_idGenerator.TryGenerateNextID(out switchID))
                     throw new CompilerException(_reader.Location, "Too many inline switches");
-
-                switchID += _inlineSwitchHash * 10000;
-                switchID += 1000000000;
 
                 SwitchCompiler swCompiler = new SwitchCompiler(_reader, _exprParser, _exprConverter, _options);
 
@@ -688,12 +683,12 @@ namespace AnoxAPECompiler.HLCompiler
 
                 _inlineSwitches.Add(sw);
 
-                swCommand = new WindowSwitchCommand(switchID);
+                swCommand = new WindowSwitchCommand(cmdType, switchID);
             }
             else
             {
                 uint label = _exprParser.ParseLabel(_reader);
-                swCommand = new WindowSwitchCommand(label);
+                swCommand = new WindowSwitchCommand(cmdType, label);
             }
         }
 
@@ -904,7 +899,7 @@ namespace AnoxAPECompiler.HLCompiler
             else
                 label = _exprParser.ParseLabel(_reader);
 
-            new ChoiceCommand(condition, str.ToByteString(), new FormattingValue(tfvs), label);
+            _choiceCommands.Add(new ChoiceCommand(condition, str.ToByteString(), new FormattingValue(tfvs), label));
         }
 
         private void CompileSubWindowDirective(bool isInCondition)
@@ -1132,7 +1127,7 @@ namespace AnoxAPECompiler.HLCompiler
 
             Token animTok = ParseIdentifierAsString(false);
 
-            bool stayFlag = false;
+            bool stayFlag = true;
             bool isStayFlagSet = false;
             while (true)
             {
@@ -1174,7 +1169,7 @@ namespace AnoxAPECompiler.HLCompiler
 
             Token titleTextTok = _reader.ReadToken(TokenReadMode.QuotedString, TokenReadProperties.Default.Add(TokenReadProperties.Flag.AllowNewLineInString));
 
-            ByteStringSlice text = Utils.EscapeSlice(titleTextTok.Value, titleTextTok.Location, true, true);
+            ByteStringSlice text = Utils.EscapeSlice(titleTextTok.Value.SubSlice(1, titleTextTok.Value.Length - 2), titleTextTok.Location, true, true);
 
             FormattingValue formattingValue = _exprParser.ParseOptionalFormattingValueList(_reader);
 

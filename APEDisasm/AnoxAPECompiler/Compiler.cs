@@ -30,7 +30,7 @@ namespace AnoxAPECompiler
         private ByteString _switchBStr;
         private ExprParser _exprParser;
         private ExprConverter _exprConverter;
-        private uint _inlineSwitchHash;
+        private IInlineSwitchIDGenerator _inlineSwitchIDGenerator;
 
         public Compiler(CompilerOptions options, Stream inStream)
         {
@@ -50,30 +50,33 @@ namespace AnoxAPECompiler
             _exprParser = new ExprParser(precedences, options.Logger, options.AllowExpFloatSyntax, options.AllowEscapesInExprStrings, options.AllowMalformedExprs);
             _exprConverter = new ExprConverter(options.AllowMalformedExprs, options.Optimize, options.Logger);
 
+            uint inlineSwitchHash;
             if (options.UseExplicitInlineSwitchHash)
-                _inlineSwitchHash = options.ExplicitInlineSwitchHash;
+                inlineSwitchHash = options.ExplicitInlineSwitchHash;
             else
-                _inlineSwitchHash = ComputeInlineSwitchHash(options.InputFileName);
+                inlineSwitchHash = ComputeInlineSwitchHash(options.InputFileName);
+
+            _inlineSwitchIDGenerator = new InlineSwitchIDGenerator(inlineSwitchHash);
         }
 
         private static uint ComputeInlineSwitchHash(string inputFileName)
         {
             string noExtFileName = Path.GetFileNameWithoutExtension(inputFileName);
 
-            int hash = 0;
+            uint hash = 0;
             foreach (char c in noExtFileName)
             {
                 if (c < 0 || c >= 128)
                     throw new ArgumentException("File name for computing inline switch hash contained non-ASCII characters");
 
-                int ci = (int)c;
+                int ci = c;
                 if (ci >= 'A' && ci <= 'Z')
                     ci += ('a' - 'A');
 
-                hash = (hash & 0x7ffffff) * 31 + ci;
+                hash = (hash & 0x7ffffffu) * 31 + (uint)ci;
             }
 
-            return (uint)(hash % 100000);
+            return hash % 100000u;
         }
 
         private APEFile InternalCompile()
@@ -368,7 +371,7 @@ namespace AnoxAPECompiler
 
         private void CompileWindowDirective(TokenReader2 tokenReader, out bool isImmediatelyAfterTLD)
         {
-            WindowCompiler windowCompiler = new WindowCompiler(tokenReader, _exprParser, _inlineSwitches, _exprConverter, _inlineSwitchHash, _options);
+            WindowCompiler windowCompiler = new WindowCompiler(tokenReader, _exprParser, _inlineSwitches, _exprConverter, _inlineSwitchIDGenerator, _options);
 
             Window window = windowCompiler.Compile(out isImmediatelyAfterTLD);
             _windows.Add(window);

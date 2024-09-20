@@ -78,7 +78,7 @@ namespace AnoxAPECompiler.HLCompiler
                     FlushExprTreeToCommands(NextCC(initialCC, 1, locTag), cmdList, stmtTree.TrueTree, locTag);
 
                 if (stmtTree.FalseTree != null)
-                    FlushExprTreeToCommands(NextCC(initialCC, 2, locTag), cmdList, stmtTree.TrueTree, locTag);
+                    FlushExprTreeToCommands(NextCC(initialCC, 2, locTag), cmdList, stmtTree.FalseTree, locTag);
 
                 stmtTree = stmtTree.NextStmt;
 
@@ -273,7 +273,7 @@ namespace AnoxAPECompiler.HLCompiler
 
             FormattingValue fmt = _exprParser.ParseOptionalFormattingValueList(_reader);
 
-            return new SwitchStmtTree(cmdType, new OptionalString(str.Value.ToByteString()), fmt, null);
+            return new SwitchStmtTree(cmdType, new OptionalString(escaped.ToByteString()), fmt, null);
         }
 
         private SwitchStmtTree CompileSetDirective(Token destTok)
