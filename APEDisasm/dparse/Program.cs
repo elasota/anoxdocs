@@ -8,9 +8,10 @@ namespace rdc
     {
         private static void PrintUsage()
         {
-            Console.Error.WriteLine("dparse-compatible APE compiler");
+            Console.Error.WriteLine("rdc dparse-compatible APE compiler front-end");
+            Console.Error.WriteLine("Copyright (c) 2024 Eric Lasota / Gale Force Games");
+            Console.Error.WriteLine("");
             Console.Error.WriteLine("Usage: dparse [options] <input>[.txt]");
-
         }
 
         private class CompilerLogger : ILogger
@@ -73,7 +74,7 @@ namespace rdc
 
                 using (FileStream outStream = new FileStream(outputPath, FileMode.Create, FileAccess.Write))
                 {
-                    apeFile.Write(new OutputStream(outStream));
+                    apeFile.Write(outStream);
                 }
             }
         }

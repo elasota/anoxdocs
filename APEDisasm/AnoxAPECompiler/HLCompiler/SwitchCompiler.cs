@@ -235,7 +235,7 @@ namespace AnoxAPECompiler.HLCompiler
             if (_options.DParseLabeledCommandHandling)
             {
                 if (!_options.DParseCommentHandling)
-                    throw new ArgumentException("DParseGotoHandling option was set without DParseCommentHandling");
+                    throw new ArgumentException("DParseLabeledCommandHandling option was set without DParseCommentHandling");
 
                 Token tok = _reader.ReadToken(TokenReadMode.UnquotedString,
                     TokenReadProperties.Default
@@ -495,11 +495,11 @@ namespace AnoxAPECompiler.HLCompiler
             else if (directiveName.Equals(_externStr))
                 return CompileExternDirective();
             else if (directiveName.Equals(_playAmbientStr))
-                throw new NotImplementedException();
+                return CompileSimpleOptionallyQuotedNameDirective(SwitchCommand.ECommandType.PlayAmbientCommand);
             else if (directiveName.Equals(_loopAmbientStr))
-                throw new NotImplementedException();
+                return CompileSimpleOptionallyQuotedNameDirective(SwitchCommand.ECommandType.LoopAmbientCommand);
             else if (directiveName.Equals(_stopAmbientStr))
-                throw new NotImplementedException();
+                return CompileSimpleOptionallyQuotedNameDirective(SwitchCommand.ECommandType.StopAmbientCommand);
             else if (directiveName.Equals(_playSceneStr))
                 return CompileSimpleOptionallyQuotedNameDirective(SwitchCommand.ECommandType.PlaySceneCommand);
             else if (directiveName.Equals(_loopSceneStr))
@@ -507,13 +507,13 @@ namespace AnoxAPECompiler.HLCompiler
             else if (directiveName.Equals(_stopSceneStr))
                 return CompileSimpleOptionallyQuotedNameDirective(SwitchCommand.ECommandType.StopSceneCommand);
             else if (directiveName.Equals(_chainScriptsStr))
-                throw new NotImplementedException();
+                return CompileSimpleOptionallyQuotedNameDirective(SwitchCommand.ECommandType.ChainScriptsCommand);
             else if (directiveName.Equals(_closeWindowStr))
                 return CompileSimpleLabeledDirective(SwitchCommand.ECommandType.CloseWindowCommand);
             else if (directiveName.Equals(_loadApeStr))
                 return CompileSimpleFormattableStringDirective(SwitchCommand.ECommandType.LoadAPECommand);
             else if (directiveName.Equals(_setFocusStr))
-                throw new NotImplementedException();
+                throw new CompilerException(tok.Location, "setfocus command is not supported");
             else
                 return CompileSetDirective(tok);
         }

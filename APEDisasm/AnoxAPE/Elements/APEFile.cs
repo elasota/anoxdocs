@@ -26,8 +26,10 @@
             RootElementList.Load(inStream, disasmStream);
         }
 
-        public void Write(OutputStream outStream)
+        public void Write(Stream stream)
         {
+            OutputStream outStream = new OutputStream(stream);
+
             outStream.WriteUInt32(317);
             outStream.WriteUInt32(0xffffffffu);
 

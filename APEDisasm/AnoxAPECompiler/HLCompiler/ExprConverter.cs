@@ -21,7 +21,7 @@ namespace AnoxAPECompiler.HLCompiler
             _logger = logger;
         }
 
-        internal IExpressionOperand ConvertValueToOperand(ulong treeLocation, IExprValue exprValue, ILogger.LocationTag locTag)
+        private IExpressionOperand ConvertValueToOperand(ulong treeLocation, IExprValue exprValue, ILogger.LocationTag locTag)
         {
             switch (exprValue.ExprType)
             {
@@ -42,7 +42,7 @@ namespace AnoxAPECompiler.HLCompiler
             }
         }
 
-        internal ExpressionValue ConvertExpression(ulong treeLocation, ExpressionExprValue expr, ILogger.LocationTag locTag)
+        private ExpressionValue ConvertExpression(ulong treeLocation, ExpressionExprValue expr, ILogger.LocationTag locTag)
         {
             if ((treeLocation >> 62) != 0)
                 throw new CompilerException(locTag, "Condition was too complex");
@@ -56,7 +56,7 @@ namespace AnoxAPECompiler.HLCompiler
             return new ExpressionValue(expr.Operator, leftLocation, expr.Left.OperandType, left, rightLocation, expr.Right.OperandType, right);
         }
 
-        internal OptionalExpression ConvertValueToOptionalExpression(IExprValue? exprValue, ILogger.LocationTag locTag)
+        public OptionalExpression ConvertValueToOptionalExpression(IExprValue? exprValue, ILogger.LocationTag locTag)
         {
             if (exprValue == null)
                 return new OptionalExpression();
@@ -64,7 +64,7 @@ namespace AnoxAPECompiler.HLCompiler
             return new OptionalExpression(ConvertValueToExpression(exprValue, locTag));
         }
 
-        internal ExpressionValue ConvertValueToExpression(IExprValue exprValue, ILogger.LocationTag locTag)
+        private ExpressionValue ConvertValueToExpression(IExprValue exprValue, ILogger.LocationTag locTag)
         {
             if (exprValue.ResultType != ExprResultType.Float)
             {
@@ -83,11 +83,17 @@ namespace AnoxAPECompiler.HLCompiler
             return ConvertExpression(1, new ExpressionExprValue(new FloatConstExprValue(0), exprValue, ExpressionValue.EOperator.Add), locTag);
         }
 
-        // Returns true if the expression should be emitted (e.g. not constant false)
-        internal bool CheckAndConvertCondition(IExprValue condition, ILogger.LocationTag locTag, out OptionalExpression expr)
+        // Returns true if the command or block using this condition should be emitted (i.e. condition is not constant false)
+        public bool CheckAndConvertCondition(IExprValue condition, ILogger.LocationTag locTag, out OptionalExpression expr)
         {
             if (_optimize)
-                throw new NotImplementedException();
+            {
+                if (condition.ExprType == ExprType.FloatConst && ((FloatConstExprValue)condition).Value == 0.0f)
+                {
+                    expr = ConvertValueToOptionalExpression(condition, locTag);
+                    return false;
+                }
+            }
 
             expr = new OptionalExpression(ConvertValueToExpression(condition, locTag));
             return true;

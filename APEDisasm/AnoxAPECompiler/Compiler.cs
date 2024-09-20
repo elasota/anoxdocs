@@ -47,7 +47,7 @@ namespace AnoxAPECompiler
 
             OperatorPrecedences precedences = (options.DParseOperatorPrecedences) ? OperatorPrecedences.DParseCompatible : OperatorPrecedences.Cpp;
 
-            _exprParser = new ExprParser(precedences, options.Logger, options.AllowExpFloatSyntax, options.AllowEscapesInExprStrings, options.AllowMalformedExprs);
+            _exprParser = new ExprParser(precedences, options.Logger, options.AllowExpFloatSyntax, options.AllowMalformedExprs, options.Optimize);
             _exprConverter = new ExprConverter(options.AllowMalformedExprs, options.Optimize, options.Logger);
 
             uint inlineSwitchHash;
@@ -94,7 +94,7 @@ namespace AnoxAPECompiler
                 DParseCompatibleApplyMacros();
 
             PositionTrackingReader ptr = new PositionTrackingReader(_inputFileBytes, _options.InputFileName);
-            TokenReader2 tokenReader = new TokenReader2(ptr, _options.AllowExpFloatSyntax);
+            TokenReader2 tokenReader = new TokenReader2(ptr, _options.AllowExpFloatSyntax, new MacroHandler());
 
             CompileInput(tokenReader);
 
@@ -393,6 +393,11 @@ namespace AnoxAPECompiler
                 CompileWindowDirective(reader, out isImmediatelyAfterTLD);
             else if (tok.Value.Equals(_switchBStr))
                 CompileSwitchDirective(reader, out isImmediatelyAfterTLD);
+            else if (tok.Value.Equals(_defineBStr))
+            {
+                reader.ParseInlineMacro();
+                isImmediatelyAfterTLD = false;
+            }
             else
                 throw new CompilerException(tok.Location, "Unknown compile directive");
         }
@@ -467,6 +472,17 @@ namespace AnoxAPECompiler
                 {
                     ILogger.MessageProperties props = new ILogger.MessageProperties(ILogger.Severity.Error, ex.LocationTag);
                     _options.Logger.WriteLine(props, ex.CompilerExceptionMessage);
+                }
+
+                return null;
+            }
+            catch (Exception ex)
+            {
+                if (_options.Logger != null)
+                {
+                    Type exType = ex.GetType();
+                    ILogger.MessageProperties props = new ILogger.MessageProperties(ILogger.Severity.Error, new ILogger.LocationTag());
+                    _options.Logger.WriteLine(props, $"Compile threw an exception of type {exType.Namespace}.{exType.Name}");
                 }
 
                 return null;

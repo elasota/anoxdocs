@@ -299,7 +299,7 @@ namespace APEDisasm
             else
             {
                 MemoryStream recompiledData = new MemoryStream();
-                recompiledAPE.Write(new OutputStream(recompiledData));
+                recompiledAPE.Write(recompiledData);
 
                 recompiledData.Position = 0;
 

@@ -123,16 +123,18 @@ namespace AnoxAPECompiler.HLCompiler
         private Queue<Token> _queue;
         private bool _hasReadEOF;
         private bool _allowExpFloats;
+        private MacroHandler _macroHandler;
 
         private static ByteString _lineCommentStartBStr = ByteString.FromAsciiString("//");
         private static ByteString _blockCommentStartBStr = ByteString.FromAsciiString("/*");
         private static ByteString _blockCommentEndBStr = ByteString.FromAsciiString("*/");
 
-        public TokenReader2(PositionTrackingReader reader, bool allowExpFloats)
+        public TokenReader2(PositionTrackingReader reader, bool allowExpFloats, MacroHandler macroHandler)
         {
             _reader = reader;
             _queue = new Queue<Token>();
             _allowExpFloats = allowExpFloats;
+            _macroHandler = macroHandler;
         }
 
         public Token ReadToken(TokenReadMode readMode, TokenReadProperties readProps)
@@ -555,7 +557,26 @@ namespace AnoxAPECompiler.HLCompiler
 
         internal void ParseInlineMacro()
         {
-            throw new NotImplementedException();
+            Token macroName = ExpectToken(TokenReadMode.Normal, TokenType.Identifier);
+
+
+            List<ByteStringSlice> tokens = new List<ByteStringSlice>();
+            while (true)
+            {
+                Token tok = PeekToken(TokenReadMode.Normal);
+
+                if (tok.TokenType == TokenType.EndOfLine || tok.TokenType == TokenType.EndOfFile)
+                    break;
+
+                ConsumeToken();
+
+                tokens.Add(tok.Value);
+            }
+
+            if (_macroHandler.FindMacro(macroName.Value) != null)
+                throw new CompilerException(macroName.Location, "Macro is already defined");
+
+            _macroHandler.AddMacro(Macro.CreateSimpleMacro(macroName.Value, tokens));
         }
 
         internal void SkipEndOfLines(TokenReadMode readMode)

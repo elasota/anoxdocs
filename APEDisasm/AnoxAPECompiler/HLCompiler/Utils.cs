@@ -184,5 +184,79 @@ namespace AnoxAPECompiler.HLCompiler
 
             return new ByteString(bytes.ToArray()).ToSlice();
         }
+
+        public static IExprValue OptimizeExpression(IExprValue expr, ILogger.LocationTag locTag)
+        {
+            if (expr.ExprType != ExprType.Expr)
+                return expr;
+
+            ExpressionExprValue exprValue = (ExpressionExprValue)expr;
+
+            IExprValue left = OptimizeExpression(exprValue.Left, locTag);
+            IExprValue right = OptimizeExpression(exprValue.Right, locTag);
+
+            if (left.ExprType != ExprType.FloatConst || right.ExprType != ExprType.FloatConst)
+                return new ExpressionExprValue(left, right, exprValue.Operator);
+
+            float leftFloat = ((FloatConstExprValue)left).Value;
+            float rightFloat = ((FloatConstExprValue)right).Value;
+            float evaluated = 0.0f;
+
+            bool? b = null;
+            switch (exprValue.Operator)
+            {
+                case ExpressionValue.EOperator.Or:
+                    b = (leftFloat != 0 || rightFloat != 0);
+                    break;
+                case ExpressionValue.EOperator.And:
+                    b = (leftFloat != 0 && rightFloat != 0);
+                    break;
+                case ExpressionValue.EOperator.Xor:
+                    b = ((leftFloat != 0) != (rightFloat != 0));
+                    break;
+                case ExpressionValue.EOperator.Gt:
+                    b = (leftFloat > rightFloat);
+                    break;
+                case ExpressionValue.EOperator.Lt:
+                    b = (leftFloat < rightFloat);
+                    break;
+                case ExpressionValue.EOperator.Ge:
+                    b = (leftFloat >= rightFloat);
+                    break;
+                case ExpressionValue.EOperator.Le:
+                    b = (leftFloat <= rightFloat);
+                    break;
+                case ExpressionValue.EOperator.Eq:
+                    b = (leftFloat == rightFloat);
+                    break;
+                case ExpressionValue.EOperator.Neq:
+                    b = (leftFloat != rightFloat);
+                    break;
+                case ExpressionValue.EOperator.Add:
+                    evaluated = leftFloat + rightFloat;
+                    break;
+                case ExpressionValue.EOperator.Sub:
+                    evaluated = leftFloat - rightFloat;
+                    break;
+                case ExpressionValue.EOperator.Mul:
+                    evaluated = leftFloat * rightFloat;
+                    break;
+                case ExpressionValue.EOperator.Div:
+                    if (rightFloat == 0.0f)
+                        throw new CompilerException(locTag, "Float expression divides by zero");
+                    evaluated = leftFloat * rightFloat;
+                    break;
+                default:
+                    throw new Exception("Internal error: Unknown expression operator");
+            }
+
+            if (b.HasValue)
+                evaluated = (b.Value ? 1 : 0);
+
+            if (!float.IsFinite(evaluated))
+                throw new CompilerException(locTag, "Float expression result was non-finite");
+
+            return new FloatConstExprValue(evaluated);
+        }
     }
 }

@@ -9,41 +9,24 @@ namespace AnoxAPECompiler.HLCompiler
 
         private OperatorPrecedences _precedences;
         private bool _allowExpFloats;
-        private bool _allowEscapesInStrings;
         private bool _allowInvalidExprs;
         private ILogger? _logger;
+        private bool _optimize;
 
-        public ExprParser(OperatorPrecedences precedences, ILogger? logger, bool allowExpFloats, bool allowEscapesInStrings, bool allowInvalidExprs)
+        public ExprParser(OperatorPrecedences precedences, ILogger? logger, bool allowExpFloats, bool allowInvalidExprs, bool optimize)
         {
             _precedences = precedences;
             _allowExpFloats = allowExpFloats;
-            _allowEscapesInStrings = allowEscapesInStrings;
             _allowInvalidExprs = allowInvalidExprs;
             _logger = logger;
-        }
-
-        private static bool IsIdentifierChar(byte c)
-        {
-            if (c >= '0' && c <= '9')
-                return true;
-
-            if (c >= 'a' && c <= 'z')
-                return true;
-
-            if (c >= 'A' && c <= 'Z')
-                return true;
-
-            if (c == '_' || c == '$')
-                return true;
-
-            return false;
+            _optimize = optimize;
         }
 
         private IExprValue ParseParenExpr(TokenReader2 reader)
         {
             reader.ConsumeToken();
 
-            IExprValue expr = ParseExpr(reader);
+            IExprValue expr = ParseExprNoOptimize(reader);
 
             Token closeParen = reader.ReadToken(TokenReadMode.Normal);
 
@@ -247,6 +230,18 @@ namespace AnoxAPECompiler.HLCompiler
 
         // Parses from the start and an expression to the end of the expression
         public IExprValue ParseExpr(TokenReader2 reader)
+        {
+            ILogger.LocationTag locTag = reader.Location;
+
+            IExprValue expr = RecursiveParseExpr(reader, _precedences.Tiers.Count);
+
+            if (_optimize)
+                expr = Utils.OptimizeExpression(expr, locTag);
+
+            return expr;
+        }
+
+        private IExprValue ParseExprNoOptimize(TokenReader2 reader)
         {
             return RecursiveParseExpr(reader, _precedences.Tiers.Count);
         }

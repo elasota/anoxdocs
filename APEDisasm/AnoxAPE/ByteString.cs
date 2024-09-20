@@ -134,7 +134,11 @@ namespace AnoxAPE
 
         public override readonly int GetHashCode()
         {
-            return 0;
+            ulong charsToHash = 0;
+            for (int i = 0; i < _length && i < 8; i++)
+                charsToHash |= (ulong)_bytes[i] << (i * 8);
+
+            return charsToHash.GetHashCode();
         }
 
         public ByteString ToByteString()

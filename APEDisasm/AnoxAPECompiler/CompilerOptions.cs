@@ -17,7 +17,6 @@ namespace AnoxAPECompiler
         public bool DParseCamCommandHandling { get; set; }
         public bool AllowMalformedExprs { get; set; }
         public bool AllowExpFloatSyntax { get; set; }
-        public bool AllowEscapesInExprStrings { get; set; }
         public bool AllowEmptyConditionBlocks { get; set; }
         public bool Optimize { get; set; }
 
@@ -33,7 +32,6 @@ namespace AnoxAPECompiler
             DParseCamCommandHandling = false;
             AllowMalformedExprs = false;
             AllowExpFloatSyntax = true;
-            AllowEscapesInExprStrings = false;
             AllowEmptyConditionBlocks = true;
         }
 
@@ -47,7 +45,6 @@ namespace AnoxAPECompiler
             DParseSetVariableNameHandling = true;
             DParseCamCommandHandling = true;
             AllowMalformedExprs = true;
-            AllowEscapesInExprStrings = false;
             Optimize = false;
             AllowEmptyConditionBlocks = false;
         }

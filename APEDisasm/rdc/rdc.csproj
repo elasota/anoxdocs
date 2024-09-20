@@ -7,4 +7,9 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="..\AnoxAPECompiler\AnoxAPECompiler.csproj" />
+    <ProjectReference Include="..\AnoxAPE\AnoxAPE.csproj" />
+  </ItemGroup>
+
 </Project>

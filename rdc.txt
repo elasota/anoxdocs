@@ -63,12 +63,15 @@ This causes tokens before the first #window or #switch directive to be
 ignored.
 
 
--dg: dparse goto handling
+-dl: dparse labeled command handling
 
-dparse doesn't strip trailing whitespace from goto statement labels and
-processes the labels as strings.  This turns on -dc too.
+dparse doesn't strip trailing whitespace or characters from goto or
+gosub commands after the label.  This affects a few labels that contain
+garbage characters after the label (e.g. in tours2 and ballotine).
+This turns on -dc too since it affects disassembled goto commands.
 
-If this isn't enabled, rdc will remove trailing whitespace.
+If this isn't enabled, rdc will require that label command parameters are
+actually labels.
 
 
 -dp: dparse operator precedence
@@ -86,13 +89,53 @@ xor between and and or.
 ^^
 ||
 
--de: Permit invalidly-typed expressions
+-ds: dparse set variable name handling
+
+dparse supports a "simplified" syntax for "set" commands:
+set <var name>
+... which is equivalent to:
+set <var name> = 1 + 0
+
+Unfortunately, this also permits whitespace in the variable name, which lead
+to numerous broken scripts, e.g.:
+set BRAINTRAIN_INTRO 0 = 1 + 0
+
+With this option enabled, rdc will support a single token after the variable
+name and concatenate it with a space and the variable name, for compatibility
+with decompiled Anachronox APE files.
+
+If you don't enable this option, then the variable name must be a single
+identifier and the token after must be an assign operator.
+
+
+-dcam: dparse cam command behavior
+
+If this is set, the first token after a "cam" command will be parsed as
+quoteless string, ignoring punctuation characters.  In Anachronox's data,
+there are several cam commands like:
+
+cam to(pacogem2) from(PlayerChar0) lift(20)
+
+... Unfortunately these incorrectly use "to(pacogem2)" as the camera name
+instead of the "to" target.  If you don't enable -dcam, rdc will consider this
+as an error.
+
+
+-de: Permit invalidly-typed expressions.  If this is disabled, expressions
+generally must evaluate to a float.
 
 -nexp: Disallow exponents in float constants
 
 -ds: Disallow escape characters in expression strings
 
--opt: Optimize constant expressions
+-dparse: Enable all dparse compatibility options
+
+-opt: Don't optimize constant expressions
+
+-noexpfloat: Disallow float literals containing exponent syntax
+
+-noemptycond: Disallow empty conditional blocks
+
 
 
 rdc permits several things that dparse doesn't:

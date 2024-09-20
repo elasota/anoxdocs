@@ -131,6 +131,8 @@ namespace AnoxAPECompiler.HLCompiler
         private static ByteString _defaultStretchStr = ByteString.FromAsciiString("default_stretch");
         private static ByteString _defaultTileStr = ByteString.FromAsciiString("default_tile");
 
+        private static ByteString _zeroZeroStr = ByteString.FromAsciiString("0:0");
+
         private CompilerOptions _options;
         public IInlineSwitchIDGenerator _idGenerator;
 
@@ -226,6 +228,9 @@ namespace AnoxAPECompiler.HLCompiler
                     {
                         _controlFlowBlocks.RemoveAt(lastIndex);
                         expr = new ExpressionExprValue(lastBlock.Condition, expr, ExpressionValue.EOperator.And);
+
+                        if (_options.Optimize)
+                            expr = Utils.OptimizeExpression(expr, newCFB.StartLocTag);
                     }
                 }
 
@@ -283,13 +288,12 @@ namespace AnoxAPECompiler.HLCompiler
 
             ByteStringSlice directiveToken = tok.Value;
 
-            bool isInCondition = (_controlFlowBlocks.Count > 0);
             if (directiveToken.Equals(_titleStr))
                 CompileCompiledFormattedStringDirective(ConditionalFormattedStringCommand.ECommandType.TitleCommand, _titleCommands);
             else if (directiveToken.Equals(_talkStr))
-                CompileTalkDirective(isInCondition);
+                CompileTalkDirective();
             else if (directiveToken.Equals(_talkExStr))
-                CompileTalkExDirective(isInCondition);
+                CompileTalkExDirective();
             else if (directiveToken.Equals(_widthStr))
                 CompileDimensionDirective(ref _width);
             else if (directiveToken.Equals(_heightStr))
@@ -303,7 +307,7 @@ namespace AnoxAPECompiler.HLCompiler
             else if (directiveToken.Equals(_flagsStr))
                 CompileFlagsDirective();
             else if (directiveToken.Equals(_subWindowStr))
-                CompileSubWindowDirective(isInCondition);
+                CompileSubWindowDirective();
             else if (directiveToken.Equals(_choiceStr))
                 CompileChoiceDirective();
             else if (directiveToken.Equals(_startConsoleStr))
@@ -315,9 +319,9 @@ namespace AnoxAPECompiler.HLCompiler
             else if (directiveToken.Equals(_styleStr))
                 CompileStyleDirective();
             else if (directiveToken.Equals(_gotoStr) || directiveToken.Equals(_nextWindowStr))
-                CompileNextWindowDirective(isInCondition);
+                CompileNextWindowDirective();
             else if (directiveToken.Equals(_returnStr))
-                CompileReturnDirective(isInCondition);
+                CompileReturnDirective();
             else if (directiveToken.Equals(_xyPrintStr))
                 CompileXYPrintDirective();
             else if (directiveToken.Equals(_xyPrintFXStr))
@@ -786,17 +790,22 @@ namespace AnoxAPECompiler.HLCompiler
             _xyPrintFXCommands.Add(new XYPrintFXCommand(xCoord, yCoord, alpha, red, green, blue, font, message, condition, format));
         }
 
-        private void CompileReturnDirective(bool isInCondition)
-        {
-            throw new NotImplementedException();
-        }
-
-        private void CompileNextWindowDirective(bool isInCondition)
+        private void CompileReturnDirective()
         {
             CheckNoCondition();
 
             if (_nextWindowCommand != null)
-                throw new CompilerException(_reader.Location, "nextwindow/goto is already defined");
+                throw new CompilerException(_reader.Location, "nextwindow/goto/return is already defined");
+
+            _nextWindowCommand = new SimpleStringCommand(SimpleStringCommand.ECommandType.NextWindowCommand, _zeroZeroStr);
+        }
+
+        private void CompileNextWindowDirective()
+        {
+            CheckNoCondition();
+
+            if (_nextWindowCommand != null)
+                throw new CompilerException(_reader.Location, "nextwindow/goto/return is already defined");
 
             Token tok = _reader.ReadToken(TokenReadMode.UnquotedString);
 
@@ -902,7 +911,7 @@ namespace AnoxAPECompiler.HLCompiler
             _choiceCommands.Add(new ChoiceCommand(condition, str.ToByteString(), new FormattingValue(tfvs), label));
         }
 
-        private void CompileSubWindowDirective(bool isInCondition)
+        private void CompileSubWindowDirective()
         {
             CheckNoCondition();
 
@@ -1060,7 +1069,7 @@ namespace AnoxAPECompiler.HLCompiler
             expr = _exprConverter.ConvertValueToOptionalExpression(exprValue, locTag);
         }
 
-        private void CompileTalkExDirective(bool isInCondition)
+        private void CompileTalkExDirective()
         {
             CheckNoCondition();
 
@@ -1101,7 +1110,7 @@ namespace AnoxAPECompiler.HLCompiler
             _talkCommand = new TalkCommand(anim1Tok.Value.ToByteString(), new OptionalString(anim2Tok.Value.ToByteString()), name1Tok.Value.ToByteString(), name2Tok.Value.ToByteString(), stay1Flag, stay2Flag);
         }
 
-        private void CompileTalkDirective(bool isInCondition)
+        private void CompileTalkDirective()
         {
             CheckNoCondition();
 
