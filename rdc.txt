@@ -104,3 +104,15 @@ rdc disallows some things that dparse allows:
   argument contains whitespace after the first identifier, and is not followed
   by a comma, then rdc will throw an error.
 
+
+rdc will produce slightly different output for functions to simplify the
+expression parser.  With dparse, if you do:
+set a = func_charinparty [ charname ]
+
+... then dparse will emit this as if the source is a float variable named
+"func_charinparty [ charname ]"
+... but if you do:
+set a = 0 + func_charinparty [ charname ]
+
+... then it will compact the whitespace and emit it as if it's named:
+"func_charinparty[charname]"

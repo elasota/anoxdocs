@@ -1,5 +1,6 @@
 ﻿using AnoxAPE;
 using AnoxAPE.Elements;
+using System.Reflection.PortableExecutable;
 
 namespace AnoxAPECompiler.HLCompiler
 {
@@ -83,7 +84,7 @@ namespace AnoxAPECompiler.HLCompiler
         }
 
 
-        private IExprValue ParseIdentifier(TokenReader2 reader, Token tok)
+        private IExprValue ParseIdentifierOrFunctionCall(TokenReader2 reader, Token tok)
         {
             reader.ConsumeToken();
 
@@ -92,7 +93,74 @@ namespace AnoxAPECompiler.HLCompiler
             if (slice[slice.Length - 1] == '$')
                 return new StringVarExprValue(slice);
             else
-                return new FloatVarExprValue(slice);
+                return ParseFloatIdentifierOrFunctionCall(reader, slice);
+        }
+
+        public ByteStringSlice ParseFunctionCallParameters(TokenReader2 reader)
+        {
+            reader.ConsumeToken();
+
+            List<ByteStringSlice> parameters = new List<ByteStringSlice>();
+            while (true)
+            {
+                Token tok = reader.ReadToken(TokenReadMode.Normal);
+
+                if (tok.TokenType == TokenType.CloseSquareBracket)
+                    break;
+
+                if (parameters.Count > 0)
+                {
+                    if (tok.TokenType != TokenType.Comma)
+                        throw new CompilerException(tok.Location, "Expected ',' or ']' after function parameter");
+
+                    tok = reader.ReadToken(TokenReadMode.Normal);
+                }
+
+                if (tok.TokenType == TokenType.Identifier)
+                {
+                    parameters.Add(tok.Value);
+
+                    Token nextTok = reader.PeekToken(TokenReadMode.Normal);
+                    if (nextTok.TokenType == TokenType.OpenSquareBracket)
+                        parameters.Add(ParseFunctionCallParameters(reader));
+                }
+                else if (tok.TokenType == TokenType.NumericLiteral)
+                    parameters.Add(tok.Value);
+                else if (tok.TokenType == TokenType.CloseSquareBracket)
+                    break;
+                else
+                    throw new CompilerException(tok.Location, "Expected identifier or comma in function parameter list");
+            }
+
+            List<byte> combined = new List<byte>();
+            combined.Add((byte)'[');
+            for (int i = 0; i < parameters.Count; i++)
+            {
+                if (i != 0)
+                    combined.Add((byte)',');
+                combined.AddRange(parameters[i]);
+            }
+            combined.Add((byte)']');
+
+            return (new ByteString(combined.ToArray())).ToSlice();
+        }
+
+        private IExprValue ParseFloatIdentifierOrFunctionCall(TokenReader2 reader, ByteStringSlice name)
+        {
+            Token nextTok = reader.PeekToken(TokenReadMode.Normal);
+
+            if (nextTok.TokenType == TokenType.OpenSquareBracket)
+            {
+                ByteStringSlice parameters = ParseFunctionCallParameters(reader);
+
+                List<byte> combined = new List<byte>();
+                combined.AddRange(name);
+                combined.AddRange(parameters);
+
+                return new FloatVarExprValue((new ByteString(combined.ToArray())).ToSlice());
+            }
+            else
+                return new FloatVarExprValue(name);
         }
 
         private IExprValue ParseBottomLevelExpr(TokenReader2 reader)
@@ -109,7 +177,7 @@ namespace AnoxAPECompiler.HLCompiler
                 return ParseNumberExpr(reader, tok);
 
             if (tok.TokenType == TokenType.Identifier)
-                return ParseIdentifier(reader, tok);
+                return ParseIdentifierOrFunctionCall(reader, tok);
 
             throw new CompilerException(tok.Location, "Expected expression");
         }
@@ -252,11 +320,24 @@ namespace AnoxAPECompiler.HLCompiler
             if (tok.TokenType == TokenType.Identifier)
             {
                 ByteStringSlice slice = tok.Value;
-                TypedFormattingValue.EFormattingValueType type = TypedFormattingValue.EFormattingValueType.VariableName;
                 if (slice[slice.Length - 1] == '$')
-                    type = TypedFormattingValue.EFormattingValueType.StringVariableName;
+                    return new TypedFormattingValue(TypedFormattingValue.EFormattingValueType.StringVariableName, new StringOperand(slice.ToByteString()));
+                else
+                {
+                    Token nextTok = reader.PeekToken(TokenReadMode.Normal);
+                    if (nextTok.TokenType == TokenType.OpenSquareBracket)
+                    {
+                        ByteStringSlice parameters = ParseFunctionCallParameters(reader);
 
-                return new TypedFormattingValue(type, new StringOperand(slice.ToByteString()));
+                        List<byte> combined = new List<byte>();
+                        combined.AddRange(slice);
+                        combined.AddRange(parameters);
+
+                        return new TypedFormattingValue(TypedFormattingValue.EFormattingValueType.VariableName, new StringOperand(new ByteString(combined.ToArray())));
+                    }
+                    else
+                        return new TypedFormattingValue(TypedFormattingValue.EFormattingValueType.VariableName, new StringOperand(slice.ToByteString()));
+                }
             }
 
             if (tok.TokenType == TokenType.StringLiteral)
@@ -283,6 +364,39 @@ namespace AnoxAPECompiler.HLCompiler
             }
 
             return new FormattingValue(tfvs);
+        }
+
+        public ByteStringSlice ReadOptionallyQuotedName(TokenReader2 reader, ILogger? logger)
+        {
+            Token nameTok = reader.ReadToken(TokenReadMode.UnquotedString, TokenReadProperties.Default.Add(TokenReadProperties.Flag.IgnoreEscapes).Add(TokenReadProperties.Flag.TerminateQuotesOnNewLine));
+            ByteStringSlice nameSlice = nameTok.Value;
+
+            bool startsWithQuote = (nameSlice[0] == '\"');
+            bool endsWithQuote = (nameSlice[0] == '\"');
+
+            if (startsWithQuote && nameSlice.Length == 1)
+                throw new CompilerException(nameTok.Location, "Empty name");
+
+            if (startsWithQuote != endsWithQuote)
+            {
+                if (logger != null)
+                    logger.WriteLine(new ILogger.MessageProperties(ILogger.Severity.Warning, nameTok.Location), "Named quote start/end quoting mismatch");
+            }
+
+            if (nameTok.TokenType == TokenType.AbstractString)
+            {
+                if (startsWithQuote)
+                    nameSlice = nameSlice.SubSlice(1, nameSlice.Length - 1);
+
+                if (endsWithQuote)
+                    nameSlice = nameSlice.SubSlice(0, nameSlice.Length - 1);
+            }
+            else if (nameTok.TokenType == TokenType.StringLiteral)
+                nameSlice = Utils.EscapeSlice(nameTok.Value.SubSlice(1, nameTok.Value.Length - 2), nameTok.Location, true, false);
+            else
+                throw new CompilerException(nameTok.Location, "Unexpected token type in name");
+
+            return nameSlice;
         }
     }
 }

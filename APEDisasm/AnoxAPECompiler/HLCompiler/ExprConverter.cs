@@ -32,7 +32,7 @@ namespace AnoxAPECompiler.HLCompiler
                 case ExprType.FloatVar:
                     return new StringOperand(((FloatVarExprValue)exprValue).VarName.ToByteString());
                 case ExprType.StringConst:
-                    return new QuotedStringOperand(TokenReader.EscapeSlice(((StringConstExprValue)exprValue).UnescapedValue, true, true, locTag).ToByteString());
+                    return new QuotedStringOperand(Utils.EscapeSlice(((StringConstExprValue)exprValue).UnescapedValue, locTag, true, true).ToByteString());
                 case ExprType.StringVar:
                     return new StringOperand(((StringVarExprValue)exprValue).VarName.ToByteString());
                 case ExprType.Invalid:

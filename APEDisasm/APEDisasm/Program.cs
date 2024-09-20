@@ -260,7 +260,7 @@ namespace APEDisasm
             void ILogger.WriteLine(ILogger.MessageProperties msgProps, string message)
             {
                 if (msgProps.Severity == ILogger.Severity.Error)
-                    Console.Error.WriteLine($"Line {msgProps.LocationTag.FileLine} Col {msgProps.LocationTag.FileCol}: {message}");
+                    Console.Error.WriteLine($"Line {msgProps.LocationTag.FileLine + 1} Col {msgProps.LocationTag.FileCol + 1}: {message}");
             }
         }
 

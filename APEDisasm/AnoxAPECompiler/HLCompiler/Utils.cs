@@ -169,6 +169,9 @@ namespace AnoxAPECompiler.HLCompiler
                 if (needsNormalEscape && b == '\\')
                 {
                     i++;
+                    if (i == slice.Length)
+                        throw new CompilerException(locTag, "Escape at end of string");
+
                     b = slice[i];
                     if (!Utils.TryResolveEscapeChar(b, out b))
                         throw new CompilerException(locTag, "Unknown escape character");

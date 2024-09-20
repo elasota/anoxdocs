@@ -353,7 +353,7 @@ namespace AnoxAPECompiler.HLCompiler
 
         private uint CompileBackgroundColor()
         {
-            _reader.ExpectToken(TokenReadMode.Normal, TokenType.Assign);
+            _reader.ExpectToken(TokenReadMode.Normal, TokenType.AssignmentOperator);
 
             Token hexStr = _reader.ReadToken(TokenReadMode.UnquotedString);
 
@@ -503,7 +503,12 @@ namespace AnoxAPECompiler.HLCompiler
         {
             _reader.ExpectToken(TokenReadMode.Normal, TokenType.OpenParen);
 
-            Token tok = _reader.ReadToken(TokenReadMode.UnquotedString, TokenReadProperties.Default.Add(TokenReadProperties.Flag.IgnoreEscapes).Add(TokenReadProperties.Flag.StopAtCloseParen));
+            Token tok = _reader.ReadToken(TokenReadMode.UnquotedString,
+                TokenReadProperties.Default
+                .Add(TokenReadProperties.Flag.IgnoreEscapes)
+                .Add(TokenReadProperties.Flag.IgnoreQuotes)
+                .Add(TokenReadProperties.Flag.IgnoreWhitespace)
+                .Add(TokenReadProperties.Flag.StopAtCloseParen));
 
             ByteStringSlice slice = tok.Value;
             if (tok.TokenType != TokenType.AbstractString && tok.TokenType != TokenType.Identifier)
@@ -553,7 +558,27 @@ namespace AnoxAPECompiler.HLCompiler
 
             CheckNoCondition();
 
-            Token nameTok = _reader.ExpectToken(TokenReadMode.Normal, TokenType.Identifier);
+            Token nameTok;
+
+            if (_options.DParseCamCommandHandling)
+            {
+                nameTok = _reader.ReadToken(TokenReadMode.UnquotedString);
+                if (_options.Logger != null)
+                {
+                    bool hasParen = false;
+                    foreach (byte b in nameTok.Value)
+                    {
+                        if (b == '(')
+                        {
+                            _options.Logger.WriteLine(new ILogger.MessageProperties(ILogger.Severity.Warning, nameTok.Location), "First parameter to 'cam' is the camera name, but this is formatted as if it's a parameter");
+                            break;
+                        }
+                    }
+                }
+            }
+            else
+                nameTok = _reader.ExpectToken(TokenReadMode.Normal, TokenType.Identifier);
+
             ByteString name = nameTok.Value.ToByteString();
 
             OptionalString from = new OptionalString();
@@ -701,9 +726,27 @@ namespace AnoxAPECompiler.HLCompiler
             _xyPrintFXCommands.Add(new XYPrintFXCommand(xCoord, yCoord, alpha, red, green, blue, font, message, condition, format));
         }
 
-        private Token ParseIdentifierAsString()
+        private Token ParseIdentifierAsString(bool stopAtCommas)
         {
-            Token tok = _reader.ExpectToken(TokenReadMode.Normal, TokenType.Identifier);
+            TokenReadProperties readProps = TokenReadProperties.Default
+                .Add(TokenReadProperties.Flag.IgnoreQuotes)
+                .Add(TokenReadProperties.Flag.IgnoreEscapes);
+
+            if (stopAtCommas)
+                readProps = readProps.Add(TokenReadProperties.Flag.StopAtComma);
+
+            Token tok = _reader.ReadToken(TokenReadMode.UnquotedString, readProps);
+
+            if (_options.Logger != null && tok.TokenType == TokenType.AbstractString && (tok.Value[0] == '\"' || tok.Value[tok.Value.Length - 1] == '\"'))
+                _options.Logger.WriteLine(new ILogger.MessageProperties(ILogger.Severity.Warning, tok.Location), "Value is a quoted string, but quotes will be parsed as part of the string in this context");
+
+            if (tok.TokenType == TokenType.StringLiteral)
+            {
+                // Kind of a hack
+                ByteStringSlice quoteStrippedName = tok.Value.SubSlice(1, tok.Value.Length - 2);
+                tok = new Token(tok.TokenType, quoteStrippedName, tok.Location);
+            }
+
             if (_options.Logger != null && tok.Value[tok.Value.Length - 1] == '$')
                 _options.Logger.WriteLine(new ILogger.MessageProperties(ILogger.Severity.Warning, tok.Location), "Value is parsed as a string, but a variable name was specified");
 
@@ -734,7 +777,7 @@ namespace AnoxAPECompiler.HLCompiler
             OptionalExpression blue = _exprConverter.ConvertValueToOptionalExpression(_exprParser.ParseExprPreferFloat(_reader), _reader.Location);
 
             _reader.ExpectToken(TokenReadMode.Normal, TokenType.Comma);
-            Token fontTok = ParseIdentifierAsString();
+            Token fontTok = ParseIdentifierAsString(true);
 
             OptionalString font = new OptionalString(fontTok.Value.ToByteString());
 
@@ -769,7 +812,7 @@ namespace AnoxAPECompiler.HLCompiler
         {
             CheckNoCondition();
 
-            ByteStringSlice nameSlice = ReadOptionallyQuotedName();
+            ByteStringSlice nameSlice = _exprParser.ReadOptionallyQuotedName(_reader, _options.Logger);
 
             if (_styleCommand != null)
                 throw new CompilerException(_reader.Location, "Style is already defined");
@@ -784,7 +827,7 @@ namespace AnoxAPECompiler.HLCompiler
             if (_fontCommand != null)
                 throw new CompilerException(_reader.Location, "font command is already defined");
 
-            ByteStringSlice fontName = ReadOptionallyQuotedName();
+            ByteStringSlice fontName = _exprParser.ReadOptionallyQuotedName(_reader, _options.Logger);
 
             _fontCommand = new SimpleStringCommand(SimpleStringCommand.ECommandType.FontCommand, fontName.ToByteString());
         }
@@ -921,46 +964,13 @@ namespace AnoxAPECompiler.HLCompiler
             }
         }
 
-        private ByteStringSlice ReadOptionallyQuotedName()
-        {
-            Token nameTok = _reader.ReadToken(TokenReadMode.UnquotedString, TokenReadProperties.Default.Add(TokenReadProperties.Flag.IgnoreEscapes).Add(TokenReadProperties.Flag.TerminateQuotesOnNewLine));
-            ByteStringSlice nameSlice = nameTok.Value;
-
-            bool startsWithQuote = (nameSlice[0] == '\"');
-            bool endsWithQuote = (nameSlice[0] == '\"');
-
-            if (startsWithQuote && nameSlice.Length == 1)
-                throw new CompilerException(nameTok.Location, "Empty name");
-
-            if (startsWithQuote != endsWithQuote)
-            {
-                if (_options.Logger != null)
-                    _options.Logger.WriteLine(new ILogger.MessageProperties(ILogger.Severity.Warning, nameTok.Location), "Named quote start/end quoting mismatch");
-            }
-
-            if (nameTok.TokenType == TokenType.AbstractString)
-            {
-                if (startsWithQuote)
-                    nameSlice = nameSlice.SubSlice(1, nameSlice.Length - 1);
-
-                if (endsWithQuote)
-                    nameSlice = nameSlice.SubSlice(0, nameSlice.Length - 1);
-            }
-            else if (nameTok.TokenType == TokenType.StringLiteral)
-                nameSlice = Utils.EscapeSlice(nameTok.Value.SubSlice(1, nameTok.Value.Length - 2), nameTok.Location, true, false);
-            else
-                throw new CompilerException(nameTok.Location, "Unexpected token type in name");
-
-            return nameSlice;
-        }
-
         private void CompileImageDirective()
         {
             OptionalExpression condition;
             if (!ResolveActiveCondition(out condition))
                 return;
 
-            ByteStringSlice nameSlice = ReadOptionallyQuotedName();
+            ByteStringSlice nameSlice = _exprParser.ReadOptionallyQuotedName(_reader, _options.Logger);
 
             ILogger.LocationTag xposLoc = _reader.Location;
             IExprValue xpos = _exprParser.ParseExprPreferFloat(_reader);
@@ -1062,10 +1072,10 @@ namespace AnoxAPECompiler.HLCompiler
             if (_talkCommand != null)
                 throw new CompilerException(_reader.Location, "talk command already defined");
 
-            Token name1Tok = ParseIdentifierAsString();
-            Token name2Tok = ParseIdentifierAsString();
-            Token anim1Tok = ParseIdentifierAsString();
-            Token anim2Tok = ParseIdentifierAsString();
+            Token name1Tok = ParseIdentifierAsString(false);
+            Token name2Tok = ParseIdentifierAsString(false);
+            Token anim1Tok = ParseIdentifierAsString(false);
+            Token anim2Tok = ParseIdentifierAsString(false);
             bool stay1Flag = true;
             bool stay2Flag = true;
 
@@ -1120,7 +1130,7 @@ namespace AnoxAPECompiler.HLCompiler
             else
                 throw new CompilerException(targetTok.Location, "Target must be either 'player' or 'npc'");
 
-            Token animTok = ParseIdentifierAsString();
+            Token animTok = ParseIdentifierAsString(false);
 
             bool stayFlag = false;
             bool isStayFlagSet = false;

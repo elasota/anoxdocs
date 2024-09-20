@@ -20,6 +20,7 @@ namespace AnoxAPECompiler.HLCompiler
             IgnoreEscapes,
             AllowNewLineInString,
             StopAtCloseParen,
+            StopAtComma,
             IgnoreWhitespace,
             IgnoreQuotes,
         }
@@ -80,11 +81,13 @@ namespace AnoxAPECompiler.HLCompiler
         ExprOperator,
         OpenParen,
         CloseParen,
+        OpenSquareBracket,
+        CloseSquareBracket,
         OpenBrace,
         CloseBrace,
         WhiteSpace,
         TopLevelDirective,
-        Assign,
+        AssignmentOperator,
         AbstractString,
     }
 
@@ -232,6 +235,9 @@ namespace AnoxAPECompiler.HLCompiler
                 if (b == ')' && readProps.HasFlag(TokenReadProperties.Flag.StopAtCloseParen))
                     break;
 
+                if (b == ',' && readProps.HasFlag(TokenReadProperties.Flag.StopAtComma))
+                    break;
+
                 if (b == '\\' && !readProps.HasFlag(TokenReadProperties.Flag.IgnoreEscapes))
                 {
                     _reader.StepAhead(1);
@@ -293,6 +299,12 @@ namespace AnoxAPECompiler.HLCompiler
             if (b == '}')
                 return ReadSimpleToken(1, TokenType.CloseBrace);
 
+            if (b == '[')
+                return ReadSimpleToken(1, TokenType.OpenSquareBracket);
+
+            if (b == ']')
+                return ReadSimpleToken(1, TokenType.CloseSquareBracket);
+
             if (b == '(')
                 return ReadSimpleToken(1, TokenType.OpenParen);
 
@@ -320,7 +332,7 @@ namespace AnoxAPECompiler.HLCompiler
 
             if (b == '=')
             {
-                TokenType tokenType = TokenType.Assign;
+                TokenType tokenType = TokenType.AssignmentOperator;
 
                 int tokenStart = _reader.FilePosition;
                 _reader.StepAhead(1);
@@ -377,7 +389,7 @@ namespace AnoxAPECompiler.HLCompiler
                     break;
 
                 _reader.StepAhead(1);
-            }    
+            }
 
             int endPos = _reader.FilePosition;
             return new Token(TokenType.Identifier, _reader.GetSlice(startPos, endPos - startPos), startLoc);
@@ -458,7 +470,7 @@ namespace AnoxAPECompiler.HLCompiler
 
         private bool IsIdentifierChar(byte b)
         {
-            return IsNumeral(b) || b == '_' || b == '$' || b == '@' || (b >= 'a' && b <= 'z') || (b >= 'A' && b <= 'Z');
+            return IsNumeral(b) || b == '_' || b == '$' || b == '@' || b == '%' || (b >= 'a' && b <= 'z') || (b >= 'A' && b <= 'Z');
         }
 
         private Token ReadSimpleToken(int length, TokenType tokenType)
@@ -501,7 +513,7 @@ namespace AnoxAPECompiler.HLCompiler
                     break;
                 }
 
-                if (b == '\\' && readProps.HasFlag(TokenReadProperties.Flag.IgnoreEscapes))
+                if (b == '\\' && !readProps.HasFlag(TokenReadProperties.Flag.IgnoreEscapes))
                 {
                     _reader.StepAhead(1);
                     if (_reader.IsAtEndOfFile)
@@ -556,272 +568,18 @@ namespace AnoxAPECompiler.HLCompiler
             }
         }
 
-        internal Token ExpectToken(TokenReadMode readMode, TokenType expectedType)
+        internal Token ExpectToken(TokenReadMode readMode, TokenType expectedType, TokenReadProperties readProps)
         {
-            Token tok = ReadToken(readMode);
+            Token tok = ReadToken(readMode, readProps);
             if (tok.TokenType != expectedType)
                 throw new CompilerException(tok.Location, $"Expected token of type {expectedType} but found {tok.TokenType}");
 
             return tok;
         }
-    }
 
-    // DELETE ME
-    internal struct TokenReadBehavior
-    {
-        public bool EscapesInStringAllowed { get; set; }
-        public bool QuotedStringAllowed { get; set; }
-        public bool NewLinesInStringAllowed { get; set; }
-        public bool NonStringAllowed { get; set; }
-        public bool PunctuationAllowed { get; set; }
-        public bool ExpressionsAllowed { get; set; }
-        public bool NumericLiteralsAllowed { get; set; }
-        public bool LabelsAllowed { get; set; }
-        public bool FloatsPermitted { get; set; }
-    }
-
-    // DELETE ME
-    internal class TokenReader
-    {
-        private byte[] _bytes;
-        private CompilerOptions _options;
-        private ByteString _lineCommentStartBStr;
-        private ByteString _blockCommentStartBStr;
-        private ByteString _blockCommentEndBStr;
-
-        private enum NumberParseStep
+        internal Token ExpectToken(TokenReadMode readMode, TokenType expectedType)
         {
-            Integral,
-            Fractional,
-            ExpSign,
-            ExpFirstDigit,
-            Exp,
-        }
-
-        public TokenReader(byte[] bytes, CompilerOptions options)
-        {
-            _bytes = bytes;
-            _options = options;
-            _lineCommentStartBStr = ByteString.FromAsciiString("//");
-            _blockCommentStartBStr = ByteString.FromAsciiString("/*");
-            _blockCommentEndBStr = ByteString.FromAsciiString("*/");
-        }
-
-        public ByteStringSlice ReadQuotedStringToken(PositionTrackingReader reader, TokenReadBehavior behavior)
-        {
-            ILogger.LocationTag locTag = reader.LocationTag;
-
-            if (!behavior.QuotedStringAllowed)
-                throw new CompilerException(locTag, "Unexpected quoted string");
-
-            int quotedStringStart = reader.FilePosition;
-            reader.StepAhead(1);
-
-            while (!reader.IsAtEndOfFile)
-            {
-                byte b = reader.PeekOne();
-                reader.StepAhead(1);
-
-                if (b == '\"')
-                {
-                    int quotedStringEnd = reader.FilePosition;
-                    return ApplyMacros(new ByteStringSlice(_bytes, quotedStringStart, quotedStringEnd - quotedStringStart));
-                }
-            }
-
-            throw new CompilerException(locTag, "Unexpected EOF in quoted string");
-        }
-
-        public ByteStringSlice ReadToken(PositionTrackingReader reader, TokenReadBehavior behavior)
-        {
-            if (reader.IsAtEndOfFile)
-                return new ByteStringSlice(_bytes, reader.FilePosition, 0);
-
-            byte firstByte = reader.PeekOne();
-            if (!behavior.PunctuationAllowed && firstByte == '\"')
-                return ReadQuotedStringToken(reader, behavior);
-
-            if (!behavior.NonStringAllowed)
-                throw new CompilerException(reader.LocationTag, "Expected quoted string");
-
-            int startFilePosition = reader.FilePosition;
-            int endFilePosition = startFilePosition;
-
-            while (!reader.IsAtEndOfFile)
-            {
-                endFilePosition = reader.FilePosition;
-
-                byte nextByte = reader.PeekOne();
-                if (Utils.IsWhitespace(nextByte))
-                    break;
-
-                if (nextByte == '/')
-                {
-                    if (reader.Matches(_lineCommentStartBStr) || reader.Matches(_blockCommentEndBStr))
-                        break;
-                }
-
-                reader.StepAhead(1);
-            }
-
-            return ApplyMacros(new ByteStringSlice(_bytes, startFilePosition, endFilePosition - startFilePosition));
-        }
-
-        public void SkipWhitespace(PositionTrackingReader reader, EOLBehavior eolBehavior)
-        {
-            ILogger.LocationTag startLoc = reader.LocationTag;
-
-            bool skipComments = (!_options.DParseCommentHandling);
-
-            bool hitAnyEOL = false;
-            while (!reader.IsAtEndOfFile)
-            {
-                if (skipComments)
-                {
-                    if (reader.Matches(_lineCommentStartBStr))
-                    {
-                        reader.StepAhead(_lineCommentStartBStr.Length);
-
-                        while (!reader.IsAtEndOfFile)
-                        {
-                            byte b = reader.PeekOne();
-                            if (b == '\n')
-                                break;
-                        }
-                        continue;
-                    }
-
-                    if (reader.Matches(_blockCommentStartBStr))
-                    {
-                        ILogger.LocationTag blockCommentStartLoc = reader.LocationTag;
-                        reader.StepAhead(_blockCommentStartBStr.Length);
-
-                        bool blockCommentClosed = false;
-                        while (!reader.IsAtEndOfFile)
-                        {
-                            if (reader.Matches(_blockCommentEndBStr))
-                            {
-                                reader.StepAhead(_blockCommentEndBStr.Length);
-                                blockCommentClosed = true;
-                                break;
-                            }
-                            reader.StepAhead(1);
-                        }
-
-                        if (!blockCommentClosed)
-                            throw new CompilerException(blockCommentStartLoc, "Block comment wasn't terminated");
-
-                        continue;
-                    }
-                }
-
-                byte nextByte = reader.PeekOne();
-                if (nextByte == '\n')
-                {
-                    if (eolBehavior == EOLBehavior.Stop)
-                        return;
-
-                    hitAnyEOL = true;
-
-                    if (eolBehavior == EOLBehavior.Fail)
-                        throw new CompilerException(startLoc, "Unexpected end of line");
-
-                    reader.StepAhead(1);
-                }
-                else if (!Utils.IsWhitespace(nextByte))
-                {
-                    if (eolBehavior == EOLBehavior.Expect && !hitAnyEOL)
-                        throw new CompilerException(startLoc, "Expected end of line");
-
-                    return;
-                }
-                else
-                    reader.StepAhead(1);
-            }
-
-            if (eolBehavior == EOLBehavior.Fail)
-                throw new CompilerException(startLoc, "Unexpected end of file");
-        }
-        private ByteStringSlice ApplyMacros(ByteStringSlice slice)
-        {
-            if (_options.DParseMacroHandling)
-                return slice;
-
-            throw new NotImplementedException();
-        }
-
-        // Parses a simple quoted string
-        public ByteStringSlice SimpleParseQuotedString(PositionTrackingReader reader, bool escapeChars, bool permitNewlines)
-        {
-            ILogger.LocationTag startLoc = reader.LocationTag;
-
-            if (reader.IsAtEndOfFile || reader.PeekOne() != '\"')
-                throw new CompilerException(startLoc, "Expected quoted string");
-
-            reader.StepAhead(1);
-
-            int stringStartPos = reader.FilePosition;
-
-            bool needsNewLineEscape = false;
-            bool needsNormalEscape = false;
-            while (true)
-            {
-                if (reader.IsAtEndOfFile)
-                    throw new CompilerException(startLoc, "Unexpected EOF in string constant");
-
-                byte b = reader.PeekOne();
-                if (b == '\n')
-                {
-                    if (permitNewlines)
-                        needsNewLineEscape = true;
-                    else
-                        throw new CompilerException(startLoc, "Unexpected end of line in string constant");
-                }
-                else if (b == '\\')
-                {
-                    needsNormalEscape = true;
-                    reader.StepAhead(1);
-
-                    if (reader.IsAtEndOfFile)
-                        throw new CompilerException(startLoc, "Unexpected EOF in string constant");
-                }
-                else if (b == '\"')
-                    break;
-
-                reader.StepAhead(1);
-            }
-
-            int stringEndPos = reader.FilePosition;
-            reader.StepAhead(1);
-
-            ByteStringSlice slice = reader.GetSlice(stringStartPos, stringEndPos - stringStartPos);
-            if (needsNewLineEscape || needsNormalEscape)
-                return EscapeSlice(slice, needsNormalEscape, needsNewLineEscape, startLoc);
-
-            return slice;
-        }
-
-        public static ByteStringSlice EscapeSlice(ByteStringSlice slice, bool needsNormalEscape, bool needsNewLineEscape, ILogger.LocationTag locTag)
-        {
-            List<byte> bytes = new List<byte>();
-
-            for (int i = 0; i < slice.Length; i++)
-            {
-                byte b = slice[i];
-                if (needsNormalEscape && b == '\\')
-                {
-                    i++;
-                    b = slice[i];
-                    if (!Utils.TryResolveEscapeChar(b, out b))
-                        throw new CompilerException(locTag, "Unknown escape character");
-                }
-                else if (needsNewLineEscape && b == '\n')
-                    b = (byte)' ';
-
-                bytes.Add(b);
-            }
-
-            return new ByteString(bytes.ToArray()).ToSlice();
+            return ExpectToken(readMode, expectedType, TokenReadProperties.Default);
         }
     }
 }

@@ -9,10 +9,12 @@ namespace AnoxAPECompiler
 
         public ILogger? Logger { get; set; }
         public bool DParseTopLevelDirectiveHandling { get; set; }
-        public bool DParseGotoHandling { get; set; }
+        public bool DParseLabeledCommandHandling { get; set; }
         public bool DParseCommentHandling { get; set; }
         public bool DParseMacroHandling { get; set; }
         public bool DParseOperatorPrecedences { get; set; }
+        public bool DParseSetVariableNameHandling { get; set; }
+        public bool DParseCamCommandHandling { get; set; }
         public bool AllowMalformedExprs { get; set; }
         public bool AllowExpFloatSyntax { get; set; }
         public bool AllowEscapesInExprStrings { get; set; }
@@ -23,10 +25,13 @@ namespace AnoxAPECompiler
         {
             InputFileName = "";
             DParseTopLevelDirectiveHandling = false;
-            DParseGotoHandling = false;
+            DParseLabeledCommandHandling = false;
             DParseCommentHandling = false;
             DParseMacroHandling = false;
             DParseOperatorPrecedences = false;
+            DParseSetVariableNameHandling = false;
+            DParseCamCommandHandling = false;
+            AllowMalformedExprs = false;
             AllowExpFloatSyntax = true;
             AllowEscapesInExprStrings = false;
             AllowEmptyConditionBlocks = true;
@@ -35,10 +40,12 @@ namespace AnoxAPECompiler
         public void SetAllDParseOptions()
         {
             DParseTopLevelDirectiveHandling = true;
-            DParseGotoHandling = true;
+            DParseLabeledCommandHandling = true;
             DParseCommentHandling = true;
             DParseMacroHandling = true;
             DParseOperatorPrecedences = true;
+            DParseSetVariableNameHandling = true;
+            DParseCamCommandHandling = true;
             AllowMalformedExprs = true;
             AllowEscapesInExprStrings = false;
             Optimize = false;

@@ -1,5 +1,7 @@
 ﻿using AnoxAPE;
 using AnoxAPE.Elements;
+using System.Collections.Generic;
+using System.Runtime.Intrinsics.X86;
 
 namespace AnoxAPECompiler.HLCompiler
 {
@@ -228,9 +230,9 @@ namespace AnoxAPECompiler.HLCompiler
             return new SwitchStmtTree(SwitchCommand.ECommandType.ExternCommand, new OptionalString(tok.Value.ToByteString()), new FormattingValue(), null);
         }
 
-        private SwitchStmtTree CompileGotoDirective()
+        private SwitchStmtTree CompileSimpleLabeledDirective(SwitchCommand.ECommandType cmdType)
         {
-            if (_options.DParseGotoHandling)
+            if (_options.DParseLabeledCommandHandling)
             {
                 if (!_options.DParseCommentHandling)
                     throw new ArgumentException("DParseGotoHandling option was set without DParseCommentHandling");
@@ -242,28 +244,32 @@ namespace AnoxAPECompiler.HLCompiler
                     .Add(TokenReadProperties.Flag.IgnoreEscapes)
                     .Add(TokenReadProperties.Flag.IgnoreQuotes));
 
-                return new SwitchStmtTree(SwitchCommand.ECommandType.GotoCommand, new OptionalString(tok.Value.ToByteString()), new FormattingValue(), null);
+                return new SwitchStmtTree(cmdType, new OptionalString(tok.Value.ToByteString()), new FormattingValue(), null);
             }
             else
-                return CompileSimpleLabeledDirective(SwitchCommand.ECommandType.GotoCommand);
+            {
+                uint label = _exprParser.ParseLabel(_reader);
+
+                uint labelLow = label % 10000;
+                uint labelHigh = label / 10000;
+
+                byte[] asciiLabelString = System.Text.Encoding.ASCII.GetBytes($"{labelHigh}:{labelLow}");
+                return new SwitchStmtTree(cmdType, new OptionalString(new ByteString(asciiLabelString)), new FormattingValue(), null);
+            }
         }
 
-        private SwitchStmtTree CompileSimpleLabeledDirective(SwitchCommand.ECommandType cmdType)
+        private SwitchStmtTree CompileSimpleOptionallyQuotedNameDirective(SwitchCommand.ECommandType cmdType)
         {
-            uint label = _exprParser.ParseLabel(_reader);
+            ByteStringSlice slice = _exprParser.ReadOptionallyQuotedName(_reader, _options.Logger);
 
-            uint labelLow = label % 10000;
-            uint labelHigh = label / 10000;
-
-            byte[] asciiLabelString = System.Text.Encoding.ASCII.GetBytes($"{labelHigh}:{labelLow}");
-            return new SwitchStmtTree(SwitchCommand.ECommandType.GotoCommand, new OptionalString(new ByteString(asciiLabelString)), new FormattingValue(), null);
+            return new SwitchStmtTree(cmdType, new OptionalString(slice.ToByteString()), new FormattingValue(), null);
         }
 
         private SwitchStmtTree CompileSimpleFormattableStringDirective(SwitchCommand.ECommandType cmdType)
         {
             Token str = _reader.ReadToken(TokenReadMode.QuotedString);
 
-            ByteStringSlice escaped = Utils.EscapeSlice(str.Value.SubSlice(1, str.Value.Length - 1), str.Location, true, false);
+            ByteStringSlice escaped = Utils.EscapeSlice(str.Value.SubSlice(1, str.Value.Length - 2), str.Location, true, false);
 
             FormattingValue fmt = _exprParser.ParseOptionalFormattingValueList(_reader);
 
@@ -272,12 +278,31 @@ namespace AnoxAPECompiler.HLCompiler
 
         private SwitchStmtTree CompileSetDirective(Token destTok)
         {
-            _reader.ExpectToken(TokenReadMode.Normal, TokenType.Assign);
+            ByteStringSlice destName = destTok.Value;
+            if (_options.DParseSetVariableNameHandling)
+            {
+                Token nextTok = _reader.PeekToken(TokenReadMode.Normal);
 
-            if (destTok.Value[destTok.Value.Length - 1] == '$')
-                return CompileSetStringDirective(destTok);
+                if (nextTok.TokenType == TokenType.NumericLiteral)
+                {
+                    _reader.ConsumeToken();
+
+                    if (_options.Logger != null)
+                        _options.Logger.WriteLine(new ILogger.MessageProperties(ILogger.Severity.Warning, nextTok.Location), "Numeric literal after a set variable name, this is allowed by compatibility options but is most likely a bug");
+
+                    List<byte> rebuiltVarName = new List<byte>();
+                    rebuiltVarName.AddRange(destName);
+                    rebuiltVarName.Add((byte)' ');
+                    rebuiltVarName.AddRange(nextTok.Value);
+
+                    destName = (new ByteString(rebuiltVarName.ToArray())).ToSlice();
+                }
+            }
+
+            if (destName[destName.Length - 1] == '$')
+                return CompileSetStringDirective(destName);
             else
-                return CompileSetFloatDirective(destTok);
+                return CompileSetFloatDirective(destName);
         }
 
         private SwitchStmtTree? CompileBracedStatementBlock()
@@ -314,6 +339,39 @@ namespace AnoxAPECompiler.HLCompiler
             }
 
             return firstStmt;
+        }
+
+        private SwitchStmtTree CompileWhileDirective(out bool needsNewLineCheck)
+        {
+            ILogger.LocationTag locTag = _reader.Location;
+            _reader.ExpectToken(TokenReadMode.Normal, TokenType.OpenParen);
+            IExprValue condition = _exprParser.ParseExprPreferFloat(_reader);
+
+            if (condition.ResultType != ExprResultType.Float && !_options.AllowMalformedExprs)
+                throw new CompilerException(locTag, "Expression didn't evaluate to a number");
+
+            _reader.ExpectToken(TokenReadMode.Normal, TokenType.CloseParen);
+
+            _reader.SkipEndOfLines(TokenReadMode.Normal);
+
+            SwitchStmtTree? internalBlock = null;
+
+            Token directiveTok = _reader.ReadToken(TokenReadMode.Normal);
+            if (directiveTok.TokenType == TokenType.OpenBrace)
+            {
+                _reader.SkipEndOfLines(TokenReadMode.Normal);
+
+                internalBlock = CompileBracedStatementBlock();
+
+                needsNewLineCheck = true;
+            }
+            else
+                internalBlock = CompileSwitchDirectiveWithoutNewLine(directiveTok, out needsNewLineCheck);
+
+            SwitchStmtTree stmt = new SwitchStmtTree(SwitchCommand.ECommandType.WhileCommand, new OptionalString(), new FormattingValue(), condition);
+            stmt.TrueTree = internalBlock;
+
+            return stmt;
         }
 
         private SwitchStmtTree CompileIfDirective(out bool needsNewLineCheck)
@@ -362,7 +420,7 @@ namespace AnoxAPECompiler.HLCompiler
                     falseBlock = CompileBracedStatementBlock();
                 }
                 else
-                    falseBlock = CompileSwitchDirective(directiveTok);
+                    falseBlock = CompileSwitchDirectiveWithoutNewLine(directiveTok, out needsNewLineCheck);
             }
             else
                 needsNewLineCheck = !hasEOLAfterTruePart;
@@ -382,11 +440,21 @@ namespace AnoxAPECompiler.HLCompiler
             if (needsNewLineCheck)
             {
                 Token eolEofTok = _reader.PeekToken(TokenReadMode.Normal);
-                if (eolEofTok.TokenType != TokenType.EndOfLine || eolEofTok.TokenType != TokenType.EndOfLine)
+                if (eolEofTok.TokenType != TokenType.EndOfLine && eolEofTok.TokenType != TokenType.EndOfFile)
                     throw new CompilerException(eolEofTok.Location, "Expected end of line after switch directive");
             }
 
             return stmt;
+        }
+
+        private SwitchStmtTree CompileUnsetDirective()
+        {
+            Token varName = _reader.ExpectToken(TokenReadMode.Normal, TokenType.Identifier);
+
+            if (varName.Value[varName.Value.Length - 1] == '$')
+                return new SwitchStmtTree(SwitchCommand.ECommandType.SetStringCommand, new OptionalString(varName.Value.ToByteString()), new FormattingValue(), null);
+            else
+                return new SwitchStmtTree(SwitchCommand.ECommandType.SetFloatCommand, new OptionalString(varName.Value.ToByteString()), new FormattingValue(), null);
         }
 
         private SwitchStmtTree CompileSwitchDirectiveWithoutNewLine(Token tok, out bool needsNewLineCheck)
@@ -402,28 +470,28 @@ namespace AnoxAPECompiler.HLCompiler
             if (directiveName.Equals(_ifStr))
                 return CompileIfDirective(out needsNewLineCheck);
             else if (directiveName.Equals(_whileStr))
-                throw new NotImplementedException();
+                return CompileWhileDirective(out needsNewLineCheck);
             else if (directiveName.Equals(_setStr))
             {
                 Token dest = _reader.ExpectToken(TokenReadMode.Normal, TokenType.Identifier);
                 return CompileSetDirective(dest);
             }
             else if (directiveName.Equals(_unsetStr))
-                throw new NotImplementedException();
+                return CompileUnsetDirective();
             else if (directiveName.Equals(_gotoStr))
-                return CompileGotoDirective();
+                return CompileSimpleLabeledDirective(SwitchCommand.ECommandType.GotoCommand);
             else if (directiveName.Equals(_returnStr))
                 return new SwitchStmtTree(SwitchCommand.ECommandType.GotoCommand, new OptionalString(_zeroZeroStr), new FormattingValue(), null);
             else if (directiveName.Equals(_gosubStr))
                 return CompileSimpleLabeledDirective(SwitchCommand.ECommandType.GoSubCommand);
             else if (directiveName.Equals(_consoleStr))
-                throw new NotImplementedException();
+                return CompileSimpleFormattableStringDirective(SwitchCommand.ECommandType.ConsoleCommand);
             else if (directiveName.Equals(_echoStr))
-                throw new NotImplementedException();
+                return CompileSimpleFormattableStringDirective(SwitchCommand.ECommandType.EchoCommand);
             else if (directiveName.Equals(_targetStr))
-                throw new NotImplementedException();
+                return CompileSimpleOptionallyQuotedNameDirective(SwitchCommand.ECommandType.TargetCommand);
             else if (directiveName.Equals(_pathTargetStr))
-                throw new NotImplementedException();
+                return CompileSimpleOptionallyQuotedNameDirective(SwitchCommand.ECommandType.PathTargetCommand);
             else if (directiveName.Equals(_externStr))
                 return CompileExternDirective();
             else if (directiveName.Equals(_playAmbientStr))
@@ -433,35 +501,82 @@ namespace AnoxAPECompiler.HLCompiler
             else if (directiveName.Equals(_stopAmbientStr))
                 throw new NotImplementedException();
             else if (directiveName.Equals(_playSceneStr))
-                throw new NotImplementedException();
+                return CompileSimpleOptionallyQuotedNameDirective(SwitchCommand.ECommandType.PlaySceneCommand);
             else if (directiveName.Equals(_loopSceneStr))
-                throw new NotImplementedException();
+                return CompileSimpleOptionallyQuotedNameDirective(SwitchCommand.ECommandType.LoopSceneCommand);
             else if (directiveName.Equals(_stopSceneStr))
-                throw new NotImplementedException();
+                return CompileSimpleOptionallyQuotedNameDirective(SwitchCommand.ECommandType.StopSceneCommand);
             else if (directiveName.Equals(_chainScriptsStr))
                 throw new NotImplementedException();
             else if (directiveName.Equals(_closeWindowStr))
                 return CompileSimpleLabeledDirective(SwitchCommand.ECommandType.CloseWindowCommand);
             else if (directiveName.Equals(_loadApeStr))
-                throw new NotImplementedException();
+                return CompileSimpleFormattableStringDirective(SwitchCommand.ECommandType.LoadAPECommand);
             else if (directiveName.Equals(_setFocusStr))
                 throw new NotImplementedException();
             else
                 return CompileSetDirective(tok);
         }
 
-        private SwitchStmtTree CompileSetFloatDirective(Token destTok)
+        private SwitchStmtTree CompileSetFloatDirective(ByteStringSlice destName)
         {
             ILogger.LocationTag locTag = _reader.Location;
 
+            Token paramTok = _reader.PeekToken(TokenReadMode.Normal);
+            if (paramTok.TokenType == TokenType.OpenSquareBracket)
+            {
+                ByteStringSlice paramStr = _exprParser.ParseFunctionCallParameters(_reader);
+
+                List<byte> combinedName = new List<byte>();
+                combinedName.AddRange(destName);
+                combinedName.AddRange(paramStr);
+
+                destName = (new ByteString(combinedName.ToArray()).ToSlice());
+            }
+
+            _reader.ExpectToken(TokenReadMode.Normal, TokenType.AssignmentOperator);
+
             IExprValue expr = _exprParser.ParseExpr(_reader);
 
-            return new SwitchStmtTree(SwitchCommand.ECommandType.SetFloatCommand, new OptionalString(destTok.Value.ToByteString()), new FormattingValue(), expr);
+            return new SwitchStmtTree(SwitchCommand.ECommandType.SetFloatCommand, new OptionalString(destName.ToByteString()), new FormattingValue(), expr);
         }
 
-        private SwitchStmtTree CompileSetStringDirective(Token destTok)
+        private SwitchStmtTree CompileSetStringDirective(ByteStringSlice destName)
         {
-            throw new NotImplementedException();
+            _reader.ExpectToken(TokenReadMode.Normal, TokenType.AssignmentOperator);
+
+            Token srcTok = _reader.ReadToken(TokenReadMode.Normal);
+
+            if (srcTok.TokenType == TokenType.StringLiteral)
+            {
+                ByteStringSlice unescapedSlice = srcTok.Value.SubSlice(1, srcTok.Value.Length - 2);
+                ByteStringSlice escapedSlice = Utils.EscapeSlice(unescapedSlice, srcTok.Location, true, false);
+
+                List<byte> combined = new List<byte>();
+                combined.AddRange(destName);
+                combined.Add((byte)'=');
+                combined.Add((byte)'\"');
+                combined.AddRange(escapedSlice);
+                combined.Add((byte)'\"');
+
+                FormattingValue fmt = _exprParser.ParseOptionalFormattingValueList(_reader);
+
+                return new SwitchStmtTree(SwitchCommand.ECommandType.SetStringCommand, new OptionalString(new ByteString(combined.ToArray())), fmt, null);
+            }
+            else if (srcTok.TokenType == TokenType.Identifier)
+            {
+                if (srcTok.Value[srcTok.Value.Length - 1] != '$')
+                    throw new CompilerException(srcTok.Location, "String set source must be a string variable");
+
+                List<byte> combined = new List<byte>();
+                combined.AddRange(destName);
+                combined.Add((byte)'=');
+                combined.AddRange(srcTok.Value);
+
+                return new SwitchStmtTree(SwitchCommand.ECommandType.SetStringCommand, new OptionalString(new ByteString(combined.ToArray())), new FormattingValue(), null);
+            }
+            else
+                throw new CompilerException(srcTok.Location, "String set source wasn't a string variable or string literal");
         }
 
         public Switch Compile(uint label, bool terminateOnCloseBrace, out bool isImmediatelyAfterTLD)
