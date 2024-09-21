@@ -141,15 +141,44 @@ namespace AnoxAPECompiler.HLCompiler
 
         public Token ReadToken(TokenReadMode readMode, TokenReadProperties readProps)
         {
-            if (_queue.Count > 0)
-                return _queue.Dequeue();
-
-            return SkipWhitespaceAndReadTokenFromReader(readMode, readProps);
+            if (_queue.Count == 0)
+                EnqueuePossibleMacro(readMode, readProps);
+            return _queue.Dequeue();
         }
 
         public Token ReadToken(TokenReadMode readMode)
         {
             return ReadToken(readMode, new TokenReadProperties());
+        }
+
+        private void EnqueuePossibleMacro(TokenReadMode readMode, TokenReadProperties readProps)
+        {
+            while (true)
+            {
+                Token tok = SkipWhitespaceAndReadTokenFromReader(readMode, readProps);
+
+                bool isEmptyMacro = false;
+                if (tok.TokenType == TokenType.AbstractString || tok.TokenType == TokenType.Identifier)
+                {
+                    Macro? macro = _macroHandler.FindMacro(tok.Value);
+
+                    if (macro != null)
+                    {
+                        IReadOnlyList<MacroToken> macroTokens = macro.Tokens;
+
+                        if (macroTokens.Count == 0)
+                            continue;
+
+                        foreach (MacroToken macroToken in macroTokens)
+                            _queue.Enqueue(new Token(macroToken.TokenType, macroToken.Token, tok.Location));
+
+                        return;
+                    }
+                }
+
+                _queue.Enqueue(tok);
+                return;
+            }
         }
 
         private Token SkipWhitespaceAndReadTokenFromReader(TokenReadMode readMode, TokenReadProperties readProps)
@@ -537,11 +566,9 @@ namespace AnoxAPECompiler.HLCompiler
             if (_queue.Count > 0)
                 return _queue.Peek();
 
-            Token parsedToken = SkipWhitespaceAndReadTokenFromReader(readMode, readProps);
+            EnqueuePossibleMacro(readMode, readProps);
 
-            _queue.Enqueue(parsedToken);
-
-            return parsedToken;
+            return _queue.Peek();
         }
 
         public Token PeekToken(TokenReadMode readMode)
@@ -562,7 +589,7 @@ namespace AnoxAPECompiler.HLCompiler
             Token macroName = ExpectToken(TokenReadMode.Normal, TokenType.Identifier);
 
 
-            List<ByteStringSlice> tokens = new List<ByteStringSlice>();
+            List<MacroToken> tokens = new List<MacroToken>();
             while (true)
             {
                 Token tok = PeekToken(TokenReadMode.Normal);
@@ -572,7 +599,7 @@ namespace AnoxAPECompiler.HLCompiler
 
                 ConsumeToken();
 
-                tokens.Add(tok.Value);
+                tokens.Add(new MacroToken(tok.TokenType, tok.Value));
             }
 
             if (_macroHandler.FindMacro(macroName.Value) != null)
