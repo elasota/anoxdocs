@@ -1,4 +1,15 @@
-rdc is a new APE compiler
+rdc is a new compiler for Anachronox APE files.  There are two programs,
+ "rdc" and "dparse"
+
+"dparse" is a mostly dparse-compatible front-end.  It takes one argument, the
+source file name, and compiles it to a .ape file in the same directory.
+
+"rdc" supports more options and behaves a bit more modern generally.  Passing
+the -d option to rdc should result in the same behavior as dparse.
+
+If something isn't working right then please report it on the issue tracker.
+
+
 
 Some explanations of options:
 
@@ -149,7 +160,8 @@ rdc disallows some things that dparse allows:
 
 
 rdc will produce slightly different output for functions to simplify the
-expression parser.  With dparse, if you do:
+expression parser even with compatibility options enabled.  With dparse, if
+you do:
 set a = func_charinparty [ charname ]
 
 ... then dparse will emit this as if the source is a float variable named
@@ -159,3 +171,5 @@ set a = 0 + func_charinparty [ charname ]
 
 ... then it will compact the whitespace and emit it as if it's named:
 "func_charinparty[charname]"
+
+rdc will always compact whitespace in function calls.
