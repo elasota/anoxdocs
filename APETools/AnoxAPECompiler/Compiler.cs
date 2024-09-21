@@ -395,7 +395,7 @@ namespace AnoxAPECompiler
                 CompileWindowDirective(reader, out isImmediatelyAfterTLD);
             else if (tok.Value.Equals(_switchBStr))
                 CompileSwitchDirective(reader, out isImmediatelyAfterTLD);
-            else if (tok.Value.Equals(_defineBStr))
+            else if (tok.Value.Equals(_defineBStr) && !_options.DParseMacroHandling)
             {
                 reader.ParseInlineMacro();
                 isImmediatelyAfterTLD = false;

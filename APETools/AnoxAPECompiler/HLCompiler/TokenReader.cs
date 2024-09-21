@@ -157,7 +157,6 @@ namespace AnoxAPECompiler.HLCompiler
             {
                 Token tok = SkipWhitespaceAndReadTokenFromReader(readMode, readProps);
 
-                bool isEmptyMacro = false;
                 if (tok.TokenType == TokenType.AbstractString || tok.TokenType == TokenType.Identifier)
                 {
                     Macro? macro = _macroHandler.FindMacro(tok.Value);
@@ -587,7 +586,6 @@ namespace AnoxAPECompiler.HLCompiler
         internal void ParseInlineMacro()
         {
             Token macroName = ExpectToken(TokenReadMode.Normal, TokenType.Identifier);
-
 
             List<MacroToken> tokens = new List<MacroToken>();
             while (true)

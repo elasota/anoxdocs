@@ -595,7 +595,7 @@ namespace AnoxAPECompiler.HLCompiler
                     _reader.ConsumeToken();
 
                     tok = _reader.PeekToken(TokenReadMode.Normal);
-                    if (tok.Value.Equals(_defineStr))
+                    if (tok.Value.Equals(_defineStr) && !_options.DParseMacroHandling)
                     {
                         _reader.ParseInlineMacro();
                         continue;
