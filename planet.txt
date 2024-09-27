@@ -1,0 +1,53 @@
+Documented behavior in camera scripts:
+
+Most camera scripts have 70 track groups (5 tracks each), some have 40
+
+Color order is ABGR
+
+
+Path flags:
+	00000040 - Unknown
+	00000004 - Global channel
+
+Director uses "Focus" type
+Global Cmd uses "Cmd" type
+
+
+Node flags:
+	Always zero
+
+Node types and "other-data" formats:
+1: Never used
+
+2: Cubic
+	<Position> : <Velocity vector> : <Relative mode> : <Name>
+	
+	Relative mode:
+		0: None
+		1: Scaled Source
+		2: Scaled Target
+		3: Inscribed
+		4: Circumscribed
+		5: Fixed Source
+		6: Fixed Target
+		7: Fixed Inscribed
+
+3: Roll
+	<Value> : <Rate> : <Name>
+
+4: Cmd
+	<Command>
+
+5: Never used
+
+6: Focus
+	<Focus target> : <Name>
+
+	Focus target 0 is the first "cubic" path, cubic paths are offset every 5 tracks.
+	"Use no focus" is 70 (Global director track?)
+
+7: FOV
+	<Value> : <Rate> : <Name>
+
+8: Scale
+	<Scale> : <Delta> : <Unknown (always 0)> : <Name>
