@@ -1,0 +1,59 @@
+Air resistance behavior:
+Maximum distance traveled is inversely proportional to air resistance
+
+At air resistance 1, a particle that would travel 100 units over 10 seconds travels 20 instead
+At air resistance 2, it will travel 1 unit
+
+Seems to follow linear air resistance formula where mass = 2.
+
+If air resistance(b) and acceleration(a) are non-zero:
+vel = (initialVel - am/b)*e^(-bt/m) + am/b
+pos = initialPos + m/b * (initialVel - am/b)(1 - e^(-bt/m)) + amt/b 
+
+If air resistance is zero:
+vel = initialVel + at
+pos = initialPos + initialVel*t + (a*t^2)/2
+
+If acceleration is zero:
+vel = initialVel*e^(-bt/m)
+pos = initialPos + m/b * initialVel*(1 - e^(-bt/m))
+
+
+
+Non-obvious entries in APD text format:
+
+genrotate : <Min rotation rate> : <Max rotation rate> : <Randomize initial angle flag>
+
+Positive rotation rates are clockwise.  A rotation rate of 1 is once per second.
+
+
+
+gennorm : <normal type>
+0 = Face screen (default)
+1 = Face up
+2 = Face direction of generator
+3 = Face screen, align particle Y axis with up vector
+4 = Face screen, align particle Y axis with generator direction
+5 = Face screen, align particle Y axis with generator direction flattened against XY plane
+
+Scene orientation is such that if the particle is facing up, and the camera is facing
+the particle looking down, with the particle in its image orientation, Y will be up
+on the camera plane, and X will be right.
+
+
+
+genloop : <number of loops limit> : <Unknown (possibly "pre-roll script on initialization")>
+
+Limits number of times generator can run
+
+
+genrandloop : <msec min> : <msec max>
+
+Described as "force next loop of all generators when this one is between <msec min> and <msec max>"
+
+
+genvol : <x> : <y> : <z> : <scale flow rate with dimensions>
+
+Spawns within volume based on flags.
+
+TBD: How "scale flow rate with dimensions" works.

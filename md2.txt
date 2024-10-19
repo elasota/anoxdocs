@@ -1,0 +1,62 @@
+The Anachronox MD2 format seems to be the same as the Quake 2 format, with some additions in the MD2 header:
+
+Version is 0x0001000f or 0x0002000f
+
+char[4] magic		0	"IDP2"
+u32 Version		4	0x0001000f or 0x0002000f or 0x0000000f
+u32 TextureWidth	8
+u32 TextureHeight	12
+
+u32 FrameSizeBytes	16
+
+u32 NumTextures		20
+u32 NumXYZ		24
+u32 NumTexCoord		28
+u32 NumTri		32
+u32 NumOpenGLCalls	36	(Not needed to parse anything)
+u32 NumFrames		40
+
+u32 TexturePos		44
+u32 TexCoordPos		48
+u32 TriPos		52
+u32 FramePos		56
+u32 GLCommandPos	60
+u32 EOFPos		64
+
+u32 NumTextureBlocks	68
+u32 TextureBlockPos	72
+
+f32 Scale X		76
+f32 Scale Y		80
+f32 Scale Z		84
+
+u32 NumTaggedSurf	88
+u32 TaggedSurfPos	92
+
+
+GL commands are a sequence of commands as follows:
+s32 NumVertsBase
+	0 = Stop
+	Positive = Triangle strip (NumVerts = NumVertsBase)
+	Negative = Triangle fan (NumVerts = -NumVertsBase)
+VertData[NumVerts] Verts
+
+VertData:
+	f32 TexCoordU
+	f32 TexCoordV
+	u32 VertIndex
+
+Tagged surface format:
+char[8] - Name (may not be null-terminated)
+int - Triangle index
+
+
+Coordinate byte usage varies.  Appears to be computed as (frame size - 40) / num_vertices.
+
+Normal is 2 bytes (unlike Q2 where it is 1 byte).
+Mapping to normals is not yet known.
+4 byte: x11 y10 z11
+3 byte: x8 y8 z8
+
+
+Texture blocks are 2 bytes, they indicate the number of GL command assocated with each texture.
