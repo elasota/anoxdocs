@@ -54,9 +54,22 @@ int - Triangle index
 Coordinate byte usage varies.  Appears to be computed as (frame size - 40) / num_vertices.
 
 Normal is 2 bytes (unlike Q2 where it is 1 byte).
-Mapping to normals is not yet known.
+Mapping to normals uses a static table which is baked into anoxgfx.dll.
+The table starts with "45 7d 74 bf 11 04 ..." and has 2048 elements.
+
 4 byte: x11 y10 z11
 3 byte: x8 y8 z8
 
 
 Texture blocks are 2 bytes, they indicate the number of GL command assocated with each texture.
+
+
+Triangle tag attachments appear to use the following algorithm (from MTX_Construct_Triangle_Xform in anoxgfx.dll):
+Given triangle (V0, V1, V2), construct matrix:
+- XaxisTemp = V1 - V0
+- ZaxisTemp = CrossProduct(XaxisTemp, V2 - V0)
+- YaxisTemp = CrossProduct(ZaxisTemp, XaxisTemp)
+- Xaxis = Normalize(XaxisTemp)
+- Yaxis = Normalize(YaxisTemp)
+- Zaxis = Normalize(ZaxisTemp)
+- Translation = V0
