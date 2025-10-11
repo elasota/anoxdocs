@@ -1,10 +1,12 @@
-CTC model format:
+CTC model format
+
+If a field is marked as INTERNAL USE then it means the data from the CTC file is ignored.
 
 0x00	char[4] magic			- "SMDL"
 0x04	int version			- Always 11 in Anachronox data but code suggests it can be as low as 8
 0x08	int skinWidth			- Skin width
 0x0c	int skinHeight			- Skin height
-0x10	int frameSize?
+0x10	int unknown1
 0x14	int numSkins
 0x18	int numXYZ
 0x1c	int numTexCoords
@@ -84,20 +86,9 @@ struct FrameData
 	Frame[numFrames] frames
 }
 
-struct VertMorph
-{
-	int unknown1
-	int unknown2
-	int unknown3
-	int unknown4
-}
-
 struct Morph
 {
-	int unknown1
-	int unknown2
-	int unknown3
-	int unknown4
+	char[16] name
 	int numVertMorphs
 	int unknown5
 	int morphVertIndexPtr		- INTERNAL USE
