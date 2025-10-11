@@ -22,8 +22,8 @@ If a field is marked as INTERNAL USE then it means the data from the CTC file is
 0x44	float unknown6			- INTERNAL USE
 0x48	int numUnknown7
 0x4c	int offsetSkins			- Skin data (64 bytes)
-0x50	int offsetVerts1		- Vert data of some sort, data is 6 dwords per xyz (24 bytes)
-0x54	int offsetVerts2		- Vert data of some sort, data is 6 dwords per xyz (24 bytes)
+0x50	int offsetVerts			- Verts, data is 6 dwords per xyz (24 bytes)
+0x54	int offsetOutputVerts		- INTERNAL USE, output vert XYZs (24 bytes)
 0x58	int offsetTris1			- Tri data of some sort, data is 3 words per tri (6 bytes)
 0x5c	int offsetTris2			- Tri data of some sort, data is 3 dwords per tri (12 bytes)
 0x60	int offsetBones			- Bones?
@@ -44,8 +44,10 @@ struct Bone
 	int parentIndexPlusOne;
 	int childCount;
 	int childListPtr;		- INTERNAL USE
-	
-	float[38] unknown
+
+	float[6] unknown
+	Matrix44f finalTransform	- INTERNAL USE
+	Matrix44f baseTransform
 }
 
 struct SkinnedVertBoneWeight
@@ -68,17 +70,14 @@ struct SkeletalData
 
 struct FrameKey
 {
-	int unknown1
-	int unknown2
-	int unknown3
-	int unknown4
-	int unknown5
-	int unknown6
+	Vec3f translation
+	Vec3f angles			- In 360-degree YXZ transform order.  For the main key, this is lerped linearly instead of circularly
 }
 
 struct Frame
 {
-	FrameKey[numFrames][numUnknownSize164 + 1] keys
+	FrameKey mainKey
+	FrameKey[numBones] boneKeys
 }
 
 struct FrameData
@@ -89,16 +88,16 @@ struct FrameData
 struct Morph
 {
 	char[16] name
-	int numVertMorphs
-	int unknown5
-	int morphVertIndexPtr		- INTERNAL USE
-	int morphDeltaPtr		- INTERNAL USE
+	int numVertMorphs		- 0ffset 16
+	float lerpFactor		- Offset 20 - INTERNAL USE
+	int morphVertIndexPtr		- Offset 24 - INTERNAL USE
+	int morphDeltaPtr		- Offset 26 - INTERNAL USE
 }
 
 struct MorphDynamicData
 {
 	int[numVertMorphs] xyzIndexes
-	float[numVertMorphs][3] deltas
+	float[numVertMorphs][3] targetPosition
 }
 
 
