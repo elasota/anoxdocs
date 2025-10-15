@@ -17,15 +17,15 @@ If a field is marked as INTERNAL USE then it means the data from the CTC file is
 0x30	int numBones
 0x34	int numMorphs
 0x38	int numUnknown3
-0x3c	int numUnknown4
+0x3c	int numTriListSizes
 0x40	int numUnknown5
 0x44	float unknown6			- INTERNAL USE
-0x48	int numUnknown7
+0x48	int numVertColors
 0x4c	int offsetSkins			- Skin data (64 bytes)
 0x50	int offsetVerts			- Verts, data is 6 dwords per xyz (24 bytes)
 0x54	int offsetOutputVerts		- INTERNAL USE, output vert XYZs (24 bytes)
-0x58	int offsetTris1			- Tri data of some sort, data is 3 words per tri (6 bytes)
-0x5c	int offsetTris2			- Tri data of some sort, data is 3 dwords per tri (12 bytes)
+0x58	int offsetTriXYZs		- Data is 3 words per tri (6 bytes)
+0x5c	int offsetTriTexCoords		- UV, 6 floats per tri (24 bytes)
 0x60	int offsetBones			- Bones?
 0x64	int offsetSkeletalData		- See notes
 0x68	int offsetAnimations
@@ -33,10 +33,10 @@ If a field is marked as INTERNAL USE then it means the data from the CTC file is
 0x70	int offsetGlCommands?
 0x74	int offsetMorphData		- Vertex morphs
 0x78	int offsetUnknown3		- Unknown3 data (12 bytes)
-0x7c	int offsetUnknown4		- Unknown4 data (4 bytes)
+0x7c	int offsetTriListSizes		- Triangle list sizes stream, one dword each (4 bytes)
 0x80	int offsetUnknown5		- Unknown5 (28 bytes)
-0x84	int offsetTris3			- Tri data of some sort, data is 40 bytes per tri, only present if numUnknown5 > 0
-0x88	int offsetUnknown7		- Unknown data (1 byte)
+0x84	int offsetTris3			- INTERNAL USE, only used if NumUnknown5 is > 0
+0x88	int offsetVertColors		- Vert color data (4 bytes)
 0x8c	int eofPos
 
 struct Bone
@@ -120,9 +120,30 @@ struct Unknown4
 
 struct Unknown5
 {
-	int unknown1
-	int unknown2
-	int unknown3		- Usually zero
-	int unknown4		- Usually zero
-	float[3] unknown5
+	int triVertIndex
+	int replacementIndex
+	int unknown		- Usually zero
+	int unknown		- Usually zero
+	int unknown
+	float[2] newTexCoords
 }
+
+struct Tri3
+{
+	int dwordTris1[3]	- Expanded from Tris1
+	int isUnmodified
+	float textureU[3]
+	float textureV[3]
+}
+
+
+"Unknown5" behavior:
+	Appears to be a vertex substitution mechanism based on some entity
+	property.  The entity property controls how many verts are
+	substituted.  In practice this is never used.
+	
+Vert color behavior:
+
+If the transparency data for a tri-vert starts with the byte sequence 33 66 e5, then the color
+is ignored and the fourth byte is used as alpha.
+Otherwise, the entire 4-component color is used.
