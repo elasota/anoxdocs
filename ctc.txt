@@ -1,6 +1,8 @@
 CTC model format
 
 If a field is marked as INTERNAL USE then it means the data from the CTC file is ignored.
+Internal use fields are used for temporary data storage, e.g. for computing intermediate
+values when drawing the model.
 
 0x00	char[4] magic			- "SMDL"
 0x04	int version			- Always 11 in Anachronox data but code suggests it can be as low as 8
@@ -16,7 +18,7 @@ If a field is marked as INTERNAL USE then it means the data from the CTC file is
 0x2c	int numAnimations
 0x30	int numBones
 0x34	int numMorphs
-0x38	int numUnknown3
+0x38	int numAttachmentPoints
 0x3c	int numTriListSizes
 0x40	int numUnknown5
 0x44	float unknown6			- INTERNAL USE
@@ -32,7 +34,7 @@ If a field is marked as INTERNAL USE then it means the data from the CTC file is
 0x6c	int offsetFrames
 0x70	int offsetGlCommands?
 0x74	int offsetMorphData		- Vertex morphs
-0x78	int offsetUnknown3		- Unknown3 data (12 bytes)
+0x78	int offsetAttachmentPoints	- Attachment points (12 bytes)
 0x7c	int offsetTriListSizes		- Triangle list sizes stream, one dword each (4 bytes)
 0x80	int offsetUnknown5		- Unknown5 (28 bytes)
 0x84	int offsetTris3			- INTERNAL USE, only used if NumUnknown5 is > 0
@@ -107,15 +109,10 @@ struct MorphData
 	MorphDynamicData[numMorphs] morphDynamicData
 }
 
-struct Unknown3
+struct AttachmentPoint
 {
 	char[8] name
-	int unknown
-}
-
-struct Unknown4
-{
-	int unknown
+	int triIndex?		- Appears to be tri index.  In every case I can find, these correspond to the last triangles in the tri list
 }
 
 struct Unknown5
@@ -147,3 +144,7 @@ Vert color behavior:
 If the transparency data for a tri-vert starts with the byte sequence 33 66 e5, then the color
 is ignored and the fourth byte is used as alpha.
 Otherwise, the entire 4-component color is used.
+
+
+Rendering is done entirely with tri lists.  Each tri list indicates a number of consecutive
+triangles from the tri list data.
